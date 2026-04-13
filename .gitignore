@@ -3,6 +3,8 @@
 .packages
 build/
 pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
 
 # IDE
 .idea/
@@ -13,9 +15,24 @@ pubspec.lock
 *.o
 *.so
 *.a
+*.dylib
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Rust (sensor_bundles FFI)
+target/
+*.rlib
+
+# Native code generation
+*.g.dart
+*.freezed.dart
+*.native_assets.yaml
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
