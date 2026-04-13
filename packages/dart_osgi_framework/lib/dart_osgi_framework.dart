@@ -13,3 +13,8 @@ export 'src/lifecycle/bundle_state_manager.dart'
 export 'src/lifecycle/managed_bundle.dart';
 export 'src/manifest/bundle_manifest.dart';
 export 'src/manifest/dependency_graph.dart';
+
+// Phase 2: Service Registry
+export 'src/registry/ldap_filter.dart';
+export 'src/registry/service_registry.dart';
+export 'src/registry/service_tracker_impl.dart';
