@@ -9,6 +9,7 @@ environment:
 
 dependencies:
   dart_osgi_api:
+  dart_osgi_framework:
   flutter:
     sdk: flutter
 
