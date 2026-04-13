@@ -35,3 +35,10 @@ export 'src/loader/isolate_bundle_loader.dart';
 export 'src/event/event.dart';
 export 'src/event/event_admin.dart';
 export 'src/event/topic_filter.dart';
+
+// Phase 10: Zero-copy Transport
+export 'src/transport/dma_buf_handle.dart';
+export 'src/transport/pointer_address_protocol.dart';
+export 'src/transport/shm_ring_buffer.dart';
+export 'src/transport/transferable_buffer.dart';
+export 'src/transport/zero_copy_contract.dart';
