@@ -42,3 +42,8 @@ export 'src/transport/pointer_address_protocol.dart';
 export 'src/transport/shm_ring_buffer.dart';
 export 'src/transport/transferable_buffer.dart';
 export 'src/transport/zero_copy_contract.dart';
+
+// Phase 11: Performance Hardening
+export 'src/performance/null_service_proxy.dart';
+export 'src/performance/startup_orchestrator.dart';
+export 'src/performance/vm_args_validator.dart';

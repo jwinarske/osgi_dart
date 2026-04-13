@@ -87,6 +87,8 @@ class BundleManifest {
     required this.exports,
     required this.vmArgs,
     this.flutterAsset,
+    this.cpuAffinity,
+    this.priorityPort = false,
   });
 
   final String symbolicName;
@@ -98,6 +100,14 @@ class BundleManifest {
   final List<ImportDeclaration> imports;
   final List<String> exports;
   final List<String> vmArgs;
+
+  /// CPU core to pin the bundle's isolate to via pthread_setaffinity.
+  /// `null` means no affinity — OS scheduler decides.
+  final int? cpuAffinity;
+
+  /// Whether this bundle accesses the framework's critical priority port.
+  /// Only instrument cluster and safety-critical bundles should set this.
+  final bool priorityPort;
 
   /// Parse a [BundleManifest] from a bundle.yaml file at [path].
   static Future<BundleManifest> load(String path) async {
@@ -161,6 +171,9 @@ class BundleManifest {
         rawVmArgs?.map<String>((dynamic e) => e as String).toList() ??
         <String>[];
 
+    final cpuAffinity = bundle['cpu_affinity'] as int?;
+    final priorityPort = bundle['priority_port'] as bool? ?? false;
+
     return BundleManifest._(
       symbolicName: symbolicName,
       version: version,
@@ -171,6 +184,8 @@ class BundleManifest {
       imports: imports,
       exports: exports,
       vmArgs: vmArgs,
+      cpuAffinity: cpuAffinity,
+      priorityPort: priorityPort,
     );
   }
 
