@@ -25,3 +25,8 @@ export 'src/framework/framework_isolate.dart';
 export 'src/framework/framework_message.dart';
 export 'src/framework/isolate_bundle_context.dart';
 export 'src/framework/isolate_bus.dart';
+
+// Phase 4: Dart Bundle Loader
+export 'src/loader/bundle_main.dart';
+export 'src/loader/bundle_spawn_args.dart';
+export 'src/loader/isolate_bundle_loader.dart';
