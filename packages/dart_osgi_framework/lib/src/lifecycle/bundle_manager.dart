@@ -41,8 +41,9 @@ class BundleManager {
     _bundles[manifest.symbolicName] = bundle;
 
     // Forward per-bundle events to the aggregate stream.
-    _bundleEventSubs[manifest.symbolicName] =
-        bundle.stateManager.events.listen(_eventController.add);
+    _bundleEventSubs[manifest.symbolicName] = bundle.stateManager.events.listen(
+      _eventController.add,
+    );
 
     return bundle;
   }

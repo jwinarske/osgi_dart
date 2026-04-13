@@ -204,13 +204,14 @@ class IsolateBundleContext implements BundleContext {
 /// Wraps a service listener with an optional LDAP filter.
 class _FilteredServiceListener {
   _FilteredServiceListener(this.listener, String? filter)
-      : _ldapFilter = filter != null ? LdapFilter.parse(filter) : null;
+    : _ldapFilter = filter != null ? LdapFilter.parse(filter) : null;
 
   final void Function(ServiceEvent event) listener;
   final LdapFilter? _ldapFilter;
 
   void onEvent(ServiceEvent event) {
-    if (_ldapFilter != null && !_ldapFilter.matches(event.reference.properties)) {
+    if (_ldapFilter != null &&
+        !_ldapFilter.matches(event.reference.properties)) {
       return;
     }
     listener(event);

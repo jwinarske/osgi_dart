@@ -9,3 +9,4 @@ workspace:
   - packages/dart_osgi_framework
   - packages/dart_osgi_flutter
   - packages/dart_osgi_test
+  - packages/sensor_bundles
