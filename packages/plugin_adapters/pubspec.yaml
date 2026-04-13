@@ -1,0 +1,19 @@
+name: plugin_adapters
+description: >
+  OSGi bundle adapters for ivi-homescreen-plugins: filament_view,
+  nav_render_view, GStreamer, camera_idl, and WebView (CEF).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.0.0"
+
+dependencies:
+  dart_osgi_api:
+  dart_osgi_framework:
+  dart_osgi_flutter:
+  flutter:
+    sdk: flutter
+
+resolution: workspace
