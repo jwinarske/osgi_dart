@@ -9,8 +9,14 @@ environment:
 
 dependencies:
   dart_osgi_api:
+    path: ../dart_osgi_api
   dart_osgi_framework:
+    path: ../dart_osgi_framework
   flutter:
     sdk: flutter
 
-resolution: workspace
+dependency_overrides:
+  dart_osgi_api:
+    path: ../dart_osgi_api
+  dart_osgi_framework:
+    path: ../dart_osgi_framework
