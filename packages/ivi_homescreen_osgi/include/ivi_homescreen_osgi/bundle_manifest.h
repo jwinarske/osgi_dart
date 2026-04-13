@@ -19,13 +19,13 @@ enum class BundlePriority { kCritical, kNormal, kBackground };
 struct BundleManifest {
   std::string symbolic_name;
   std::string version;
-  BundleType type;
+  BundleType type = BundleType::kDart;
   std::string activator;
   std::string flutter_asset;  // AOT .so path; empty for dart-type bundles
-  BundlePriority priority;
-  int32_t timeout_ms;
+  BundlePriority priority = BundlePriority::kNormal;
+  int32_t timeout_ms = 5000;
   std::vector<std::string> vm_args;
-  int32_t surface_z_order;  // Priority-ordered surface stack via ivi-shell
+  int32_t surface_z_order = 0;  // Priority-ordered surface stack via ivi-shell
 };
 
 }  // namespace ivi_homescreen_osgi

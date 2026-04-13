@@ -17,8 +17,21 @@ sealed class LdapFilter {
   /// Parse an LDAP filter string.
   ///
   /// Throws [FilterParseException] on malformed input.
+  /// Maximum allowed input length to prevent DoS via large filter strings.
+  static const maxInputLength = 4096;
+
+  /// Maximum nesting depth to prevent stack overflow.
+  static const maxDepth = 32;
+
   static LdapFilter parse(String input) {
-    final parser = _FilterParser(input.trim());
+    final trimmed = input.trim();
+    if (trimmed.length > maxInputLength) {
+      throw FilterParseException(
+        'Filter exceeds maximum length of $maxInputLength characters',
+        '${trimmed.substring(0, 80)}...',
+      );
+    }
+    final parser = _FilterParser(trimmed);
     final filter = parser.parseFilter();
     if (parser._pos != parser._input.length) {
       throw FilterParseException(
@@ -137,11 +150,20 @@ class _FilterParser {
 
   final String _input;
   int _pos = 0;
+  int _depth = 0;
 
   LdapFilter parseFilter() {
+    _depth++;
+    if (_depth > LdapFilter.maxDepth) {
+      throw FilterParseException(
+        'Filter exceeds maximum nesting depth of ${LdapFilter.maxDepth}',
+        _input,
+      );
+    }
     _expect('(');
     final filter = _parseFilterComp();
     _expect(')');
+    _depth--;
     return filter;
   }
 

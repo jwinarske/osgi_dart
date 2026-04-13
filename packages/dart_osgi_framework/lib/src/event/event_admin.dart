@@ -53,19 +53,24 @@ class EventAdmin {
   /// wildcard suffix (`"com/ivi/can/*"`).
   Stream<Event> subscribe(String topicPattern) {
     final filter = TopicFilter(topicPattern);
+    late final _Subscription sub;
     final controller = StreamController<Event>.broadcast(
       onCancel: () {
-        _subscriptions.removeWhere((s) => s.filter == filter);
+        sub.innerSubscription?.cancel();
+        _subscriptions.remove(sub);
       },
     );
 
-    final sub = _Subscription(filter: filter, controller: controller);
-    _subscriptions.add(sub);
-
-    // Wire to the main broadcast stream.
-    _controller.stream
+    final innerSub = _controller.stream
         .where((event) => filter.matches(event.topic))
         .listen(controller.add);
+
+    sub = _Subscription(
+      filter: filter,
+      controller: controller,
+      innerSubscription: innerSub,
+    );
+    _subscriptions.add(sub);
 
     return controller.stream;
   }
@@ -114,6 +119,7 @@ class EventAdmin {
   /// Dispose the EventAdmin and close all streams.
   void dispose() {
     for (final sub in _subscriptions) {
+      sub.innerSubscription?.cancel();
       sub.controller.close();
     }
     _subscriptions.clear();
@@ -122,8 +128,13 @@ class EventAdmin {
 }
 
 class _Subscription {
-  _Subscription({required this.filter, required this.controller});
+  _Subscription({
+    required this.filter,
+    required this.controller,
+    this.innerSubscription,
+  });
 
   final TopicFilter filter;
   final StreamController<Event> controller;
+  final StreamSubscription<Event>? innerSubscription;
 }

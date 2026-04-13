@@ -1,4 +1,5 @@
-// Phase 5: comp_surf lifecycle hooks — surface show/hide on bundle state transitions.
+// Phase 5: comp_surf lifecycle hooks — surface show/hide on bundle state
+// transitions.
 
 #ifndef IVI_HOMESCREEN_OSGI_COMP_SURF_LIFECYCLE_H_
 #define IVI_HOMESCREEN_OSGI_COMP_SURF_LIFECYCLE_H_
@@ -15,7 +16,12 @@ namespace ivi_homescreen_osgi {
 /// - Surface z-ordering is priority-based via ivi-shell
 class CompSurfLifecycle {
  public:
+  CompSurfLifecycle() = default;
   virtual ~CompSurfLifecycle() = default;
+  CompSurfLifecycle(const CompSurfLifecycle&) = delete;
+  CompSurfLifecycle& operator=(const CompSurfLifecycle&) = delete;
+  CompSurfLifecycle(CompSurfLifecycle&&) = delete;
+  CompSurfLifecycle& operator=(CompSurfLifecycle&&) = delete;
 
   /// Show the surface for a bundle (STARTING → ACTIVE transition).
   ///
@@ -38,7 +44,7 @@ class CompSurfLifecycle {
   virtual void SetZOrder(int32_t surface_id, int32_t z_order) = 0;
 
   /// Query the current z-order of a surface.
-  virtual int32_t GetZOrder(int32_t surface_id) const = 0;
+  [[nodiscard]] virtual int32_t GetZOrder(int32_t surface_id) const = 0;
 };
 
 }  // namespace ivi_homescreen_osgi

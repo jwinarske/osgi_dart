@@ -16,6 +16,7 @@ class BundleManager {
   BundleManager();
 
   final _bundles = <String, ManagedBundle>{};
+  final _bundleEventSubs = <String, StreamSubscription<BundleEvent>>{};
 
   final _eventController = StreamController<BundleEvent>.broadcast();
 
@@ -40,7 +41,8 @@ class BundleManager {
     _bundles[manifest.symbolicName] = bundle;
 
     // Forward per-bundle events to the aggregate stream.
-    bundle.stateManager.events.listen(_eventController.add);
+    _bundleEventSubs[manifest.symbolicName] =
+        bundle.stateManager.events.listen(_eventController.add);
 
     return bundle;
   }
@@ -122,6 +124,7 @@ class BundleManager {
       bundle.stateManager.transition(BundleState.uninstalled);
     }
     _bundles.remove(symbolicName);
+    _bundleEventSubs.remove(symbolicName)?.cancel();
     bundle.stateManager.dispose();
   }
 
@@ -138,6 +141,10 @@ class BundleManager {
 
   /// Dispose all bundles and close the event stream.
   void dispose() {
+    for (final sub in _bundleEventSubs.values) {
+      sub.cancel();
+    }
+    _bundleEventSubs.clear();
     for (final bundle in _bundles.values) {
       bundle.stateManager.dispose();
     }

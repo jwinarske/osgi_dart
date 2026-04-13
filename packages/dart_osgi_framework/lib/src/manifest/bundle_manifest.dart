@@ -40,6 +40,11 @@ class StartupConfig {
       _ => throw ManifestException('Invalid startup priority: "$priorityStr"'),
     };
     final timeoutMs = map['timeout_ms'] as int? ?? defaultTimeoutMs;
+    if (timeoutMs <= 0 || timeoutMs > 60000) {
+      throw ManifestException(
+        'timeout_ms must be between 1 and 60000, got $timeoutMs',
+      );
+    }
     return StartupConfig(priority: priority, timeoutMs: timeoutMs);
   }
 }

@@ -20,7 +20,12 @@ namespace ivi_homescreen_osgi {
 /// for surface visibility.
 class BundleEngineManager {
  public:
+  BundleEngineManager() = default;
   virtual ~BundleEngineManager() = default;
+  BundleEngineManager(const BundleEngineManager&) = delete;
+  BundleEngineManager& operator=(const BundleEngineManager&) = delete;
+  BundleEngineManager(BundleEngineManager&&) = delete;
+  BundleEngineManager& operator=(BundleEngineManager&&) = delete;
 
   /// Spawn a new FlutterEngine for the given bundle manifest.
   ///
@@ -36,7 +41,7 @@ class BundleEngineManager {
   virtual void SetFrameworkPort(int64_t framework_port) = 0;
 
   /// Get the number of currently active bundle engines.
-  virtual size_t ActiveEngineCount() const = 0;
+  [[nodiscard]] virtual size_t ActiveEngineCount() const = 0;
 };
 
 }  // namespace ivi_homescreen_osgi

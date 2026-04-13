@@ -19,7 +19,12 @@ namespace ivi_homescreen_osgi {
 /// Filament, Wayland surface ops).
 class OsgiBridgePlugin {
  public:
+  OsgiBridgePlugin() = default;
   virtual ~OsgiBridgePlugin() = default;
+  OsgiBridgePlugin(const OsgiBridgePlugin&) = delete;
+  OsgiBridgePlugin& operator=(const OsgiBridgePlugin&) = delete;
+  OsgiBridgePlugin(OsgiBridgePlugin&&) = delete;
+  OsgiBridgePlugin& operator=(OsgiBridgePlugin&&) = delete;
 
   /// Register the framework Dart_Port with a bundle engine.
   ///
@@ -35,7 +40,8 @@ class OsgiBridgePlugin {
   virtual void RegisterWithRegistrar(void* registrar) = 0;
 
   /// Query whether the bridge has been established for a bundle.
-  virtual bool IsBridged(const std::string& symbolic_name) const = 0;
+  [[nodiscard]] virtual bool IsBridged(
+      const std::string& symbolic_name) const = 0;
 };
 
 }  // namespace ivi_homescreen_osgi

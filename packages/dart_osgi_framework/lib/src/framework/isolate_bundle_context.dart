@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dart_osgi_api/dart_osgi_api.dart';
 
 import '../lifecycle/managed_bundle.dart';
+import '../registry/ldap_filter.dart';
 import '../registry/service_registry.dart';
 import '../registry/service_tracker_impl.dart';
 import 'isolate_bus.dart';
@@ -36,8 +38,10 @@ class IsolateBundleContext implements BundleContext {
   final Stream<BundleEvent> _bundleEvents;
   final Stream<ServiceEvent> _serviceEvents;
 
-  final _bundleListeners = <void Function(BundleEvent)>[];
-  final _serviceListeners = <_FilteredServiceListener>[];
+  final _bundleListeners =
+      <void Function(BundleEvent), StreamSubscription<BundleEvent>>{};
+  final _serviceListeners =
+      <_FilteredServiceListener, StreamSubscription<ServiceEvent>>{};
   final _trackers = <ServiceTrackerImpl<Object>>[];
   final _registrations = <ServiceRegistration<Object>>[];
 
@@ -117,17 +121,14 @@ class IsolateBundleContext implements BundleContext {
   @override
   void addBundleListener(void Function(BundleEvent event) listener) {
     _checkDisposed();
-    _bundleListeners.add(listener);
-    _bundleEvents.listen((event) {
-      if (_bundleListeners.contains(listener)) {
-        listener(event);
-      }
-    });
+    if (_bundleListeners.containsKey(listener)) return;
+    final sub = _bundleEvents.listen(listener);
+    _bundleListeners[listener] = sub;
   }
 
   @override
   void removeBundleListener(void Function(BundleEvent event) listener) {
-    _bundleListeners.remove(listener);
+    _bundleListeners.remove(listener)?.cancel();
   }
 
   @override
@@ -137,17 +138,19 @@ class IsolateBundleContext implements BundleContext {
   }) {
     _checkDisposed();
     final filtered = _FilteredServiceListener(listener, filter);
-    _serviceListeners.add(filtered);
-    _serviceEvents.listen((event) {
-      if (_serviceListeners.contains(filtered)) {
-        filtered.onEvent(event);
-      }
-    });
+    if (_serviceListeners.containsKey(filtered)) return;
+    final sub = _serviceEvents.listen(filtered.onEvent);
+    _serviceListeners[filtered] = sub;
   }
 
   @override
   void removeServiceListener(void Function(ServiceEvent event) listener) {
-    _serviceListeners.removeWhere((f) => f.listener == listener);
+    final key = _serviceListeners.keys
+        .where((f) => f.listener == listener)
+        .firstOrNull;
+    if (key != null) {
+      _serviceListeners.remove(key)?.cancel();
+    }
   }
 
   // ── Bus convenience ───────────────────────────────────────────────
@@ -179,7 +182,13 @@ class IsolateBundleContext implements BundleContext {
     }
     _registrations.clear();
 
+    for (final sub in _bundleListeners.values) {
+      await sub.cancel();
+    }
     _bundleListeners.clear();
+    for (final sub in _serviceListeners.values) {
+      await sub.cancel();
+    }
     _serviceListeners.clear();
   }
 
@@ -192,21 +201,26 @@ class IsolateBundleContext implements BundleContext {
   }
 }
 
-/// Wraps a service listener with an optional LDAP filter string.
+/// Wraps a service listener with an optional LDAP filter.
 class _FilteredServiceListener {
-  _FilteredServiceListener(this.listener, this.filter);
+  _FilteredServiceListener(this.listener, String? filter)
+      : _ldapFilter = filter != null ? LdapFilter.parse(filter) : null;
 
   final void Function(ServiceEvent event) listener;
-  final String? filter;
+  final LdapFilter? _ldapFilter;
 
   void onEvent(ServiceEvent event) {
-    // If a filter is specified, only deliver events whose service
-    // properties match. For simplicity, we filter on the reference
-    // properties using basic string matching on objectClass.
-    if (filter != null) {
-      final objectClass = event.reference.getProperty('objectClass') as String?;
-      if (objectClass == null || !objectClass.contains(filter!)) return;
+    if (_ldapFilter != null && !_ldapFilter.matches(event.reference.properties)) {
+      return;
     }
     listener(event);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _FilteredServiceListener && listener == other.listener;
+
+  @override
+  int get hashCode => listener.hashCode;
 }

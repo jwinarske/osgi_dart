@@ -80,7 +80,18 @@ Future<void> bundleMain(BundleMainConfig config) async {
   // 5. Message loop — process until StopSignal.
   await for (final msg in port) {
     if (msg is StopSignal) break;
-    proxy.handleMessage(msg);
+    try {
+      proxy.handleMessage(msg);
+    } catch (e, st) {
+      // Report error to framework but keep the bundle running.
+      args.frameworkPort.send(
+        BundleStartFailed(
+          symbolicName: args.symbolicName,
+          error: e,
+          stackTrace: st,
+        ),
+      );
+    }
   }
 
   // 6. Shutdown.

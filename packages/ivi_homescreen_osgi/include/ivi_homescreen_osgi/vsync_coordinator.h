@@ -18,7 +18,12 @@ namespace ivi_homescreen_osgi {
 /// render at the same time, then commits all surfaces together.
 class VsyncCoordinator {
  public:
+  VsyncCoordinator() = default;
   virtual ~VsyncCoordinator() = default;
+  VsyncCoordinator(const VsyncCoordinator&) = delete;
+  VsyncCoordinator& operator=(const VsyncCoordinator&) = delete;
+  VsyncCoordinator(VsyncCoordinator&&) = delete;
+  VsyncCoordinator& operator=(VsyncCoordinator&&) = delete;
 
   /// Register a bundle engine to receive vsync callbacks.
   ///

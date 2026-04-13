@@ -1,4 +1,5 @@
-// Phase 5: FlutterEngineBundleLoader — spawns a FlutterEngine per bundle AOT .so.
+// Phase 5: FlutterEngineBundleLoader — spawns a FlutterEngine per bundle AOT
+// .so.
 
 #ifndef IVI_HOMESCREEN_OSGI_FLUTTER_ENGINE_BUNDLE_LOADER_H_
 #define IVI_HOMESCREEN_OSGI_FLUTTER_ENGINE_BUNDLE_LOADER_H_
@@ -22,7 +23,13 @@ namespace ivi_homescreen_osgi {
 /// All engines share the Dart VM — SendPort works cross-engine.
 class FlutterEngineBundleLoader {
  public:
+  FlutterEngineBundleLoader() = default;
   virtual ~FlutterEngineBundleLoader() = default;
+  FlutterEngineBundleLoader(const FlutterEngineBundleLoader&) = delete;
+  FlutterEngineBundleLoader& operator=(const FlutterEngineBundleLoader&) =
+      delete;
+  FlutterEngineBundleLoader(FlutterEngineBundleLoader&&) = delete;
+  FlutterEngineBundleLoader& operator=(FlutterEngineBundleLoader&&) = delete;
 
   /// Load and start a Flutter bundle engine.
   ///
@@ -38,7 +45,8 @@ class FlutterEngineBundleLoader {
   virtual void UnloadBundle(const std::string& symbolic_name) = 0;
 
   /// Check if a bundle engine is currently running.
-  virtual bool IsRunning(const std::string& symbolic_name) const = 0;
+  [[nodiscard]] virtual bool IsRunning(
+      const std::string& symbolic_name) const = 0;
 };
 
 }  // namespace ivi_homescreen_osgi
