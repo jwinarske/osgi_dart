@@ -1,0 +1,13 @@
+name: dart_osgi_test
+description: Test harness, mock registry, and service test builder for OSGi bundles.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  dart_osgi_api:
+  dart_osgi_framework:
+
+resolution: workspace

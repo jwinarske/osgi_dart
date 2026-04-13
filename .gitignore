@@ -1,0 +1,22 @@
+# Dart/Flutter
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# C++
+*.o
+*.so
+*.a
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+
+# OS
+.DS_Store
+Thumbs.db
