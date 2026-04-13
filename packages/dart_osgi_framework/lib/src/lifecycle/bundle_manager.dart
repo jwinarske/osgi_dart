@@ -18,7 +18,7 @@ class BundleManager {
   final _bundles = <String, ManagedBundle>{};
   final _bundleEventSubs = <String, StreamSubscription<BundleEvent>>{};
 
-  final _eventController = StreamController<BundleEvent>.broadcast();
+  final _eventController = StreamController<BundleEvent>.broadcast(sync: true);
 
   /// Aggregated lifecycle event stream across all managed bundles.
   Stream<BundleEvent> get events => _eventController.stream;

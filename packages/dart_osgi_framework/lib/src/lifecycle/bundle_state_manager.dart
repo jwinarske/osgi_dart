@@ -19,7 +19,7 @@ class BundleStateManager {
 
   final Bundle _bundle;
 
-  final _controller = StreamController<BundleEvent>.broadcast();
+  final _controller = StreamController<BundleEvent>.broadcast(sync: true);
 
   /// Stream of lifecycle events for this bundle.
   Stream<BundleEvent> get events => _controller.stream;

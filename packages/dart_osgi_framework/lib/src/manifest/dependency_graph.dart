@@ -89,15 +89,11 @@ class DependencyGraph {
     }
 
     // Topological sort (Kahn's algorithm) with cycle detection.
-    final inDegree = <String, int>{};
-    for (final name in adj.keys) {
-      inDegree[name] = 0;
-    }
-    for (final deps in adj.values) {
-      for (final dep in deps) {
-        inDegree[dep] = (inDegree[dep] ?? 0) + 1;
-      }
-    }
+    // adj[m] = set of bundles m depends on. Edge: dep → m.
+    // In-degree of m = number of its dependencies = adj[m].length.
+    final inDegree = <String, int>{
+      for (final entry in adj.entries) entry.key: entry.value.length,
+    };
 
     final queue = <String>[
       for (final entry in inDegree.entries)

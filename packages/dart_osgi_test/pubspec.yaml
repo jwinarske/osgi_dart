@@ -10,4 +10,7 @@ dependencies:
   dart_osgi_api:
   dart_osgi_framework:
 
+dev_dependencies:
+  test: ^1.25.0
+
 resolution: workspace
