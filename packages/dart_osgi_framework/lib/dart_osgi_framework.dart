@@ -18,3 +18,10 @@ export 'src/manifest/dependency_graph.dart';
 export 'src/registry/ldap_filter.dart';
 export 'src/registry/service_registry.dart';
 export 'src/registry/service_tracker_impl.dart';
+
+// Phase 3: Framework Isolate & Bundle Context
+export 'src/framework/dart_osgi_framework.dart';
+export 'src/framework/framework_isolate.dart';
+export 'src/framework/framework_message.dart';
+export 'src/framework/isolate_bundle_context.dart';
+export 'src/framework/isolate_bus.dart';
