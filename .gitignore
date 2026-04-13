@@ -31,6 +31,9 @@ target/
 *.freezed.dart
 *.native_assets.yaml
 
+# Coverage
+coverage/
+
 # Claude Code
 .claude/
 
