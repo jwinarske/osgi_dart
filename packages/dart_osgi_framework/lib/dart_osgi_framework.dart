@@ -30,3 +30,8 @@ export 'src/framework/isolate_bus.dart';
 export 'src/loader/bundle_main.dart';
 export 'src/loader/bundle_spawn_args.dart';
 export 'src/loader/isolate_bundle_loader.dart';
+
+// Phase 6: EventAdmin
+export 'src/event/event.dart';
+export 'src/event/event_admin.dart';
+export 'src/event/topic_filter.dart';
