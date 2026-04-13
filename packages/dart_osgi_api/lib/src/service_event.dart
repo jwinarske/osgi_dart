@@ -1,11 +1,7 @@
 import 'service_reference.dart';
 
 /// Types of service registry events.
-enum ServiceEventType {
-  registered,
-  modified,
-  unregistering,
-}
+enum ServiceEventType { registered, modified, unregistering }
 
 /// Fired when a service is registered, modified, or unregistered.
 class ServiceEvent {

@@ -23,8 +23,4 @@ abstract class Bundle {
 }
 
 /// Startup priority levels for bundle ordering.
-enum BundlePriority {
-  critical,
-  normal,
-  background,
-}
+enum BundlePriority { critical, normal, background }
