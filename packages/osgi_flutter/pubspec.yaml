@@ -3,7 +3,7 @@ description: >
   Flutter integration for the Dart OSGi framework: the MethodChannel shell
   transport, and the widgets a bundle needs to surface its own lifecycle.
 version: 0.1.0
-repository: https://github.com/jwinarske/dart_osgi
+repository: https://github.com/jwinarske/osgi_dart
 publish_to: none
 
 environment:

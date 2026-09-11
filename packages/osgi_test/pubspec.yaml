@@ -4,7 +4,7 @@ description: >
   transport, a fake service registry, and lifecycle assertions -- so a bundle's
   activator can be tested without a shell, an engine, or a display.
 version: 0.1.0
-repository: https://github.com/jwinarske/dart_osgi
+repository: https://github.com/jwinarske/osgi_dart
 publish_to: none
 
 environment:

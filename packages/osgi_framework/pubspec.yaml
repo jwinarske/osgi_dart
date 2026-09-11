@@ -4,7 +4,7 @@ description: >
   admin, implemented over isolates. Pure Dart -- it runs in the framework
   isolate and never touches Flutter.
 version: 0.1.0
-repository: https://github.com/jwinarske/dart_osgi
+repository: https://github.com/jwinarske/osgi_dart
 publish_to: none
 
 environment:

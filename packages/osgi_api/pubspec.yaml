@@ -4,7 +4,7 @@ description: >
   service registry, and the shell transport seam. Pure Dart, no Flutter
   dependency, so headless service bundles and tests can depend on it alone.
 version: 0.1.0
-repository: https://github.com/jwinarske/dart_osgi
+repository: https://github.com/jwinarske/osgi_dart
 publish_to: none
 
 environment:
