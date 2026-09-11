@@ -1,0 +1,8 @@
+.dart_tool/
+build/
+doc/api/
+
+# These are libraries, not applications. Committing the lockfile would pin CI to
+# one resolution and hide the case that actually breaks published packages: a
+# consumer resolving against newer versions of the same constraints.
+pubspec.lock

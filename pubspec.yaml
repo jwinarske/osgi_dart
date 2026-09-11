@@ -1,0 +1,20 @@
+name: dart_osgi_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+# Native pub workspaces (Dart 3.6+) rather than melos: one lockfile, one
+# `.dart_tool`, and no extra dependency to keep current.
+#
+# A workspace resolves as a unit, and osgi_flutter depends on the Flutter SDK --
+# so `flutter pub get`, not `dart pub get`, is what resolves this tree. The
+# pure-Dart packages still analyze and test with plain `dart`.
+workspace:
+  - packages/osgi_api
+  - packages/osgi_flutter
+  - packages/osgi_framework
+  - packages/osgi_test
+
+dev_dependencies:
+  lints: ^5.0.0

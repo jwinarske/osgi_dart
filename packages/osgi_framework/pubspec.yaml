@@ -1,0 +1,20 @@
+name: osgi_framework
+description: >
+  A Dart-native OSGi framework: bundle lifecycle, service registry, and event
+  admin, implemented over isolates. Pure Dart -- it runs in the framework
+  isolate and never touches Flutter.
+version: 0.1.0
+repository: https://github.com/jwinarske/dart_osgi
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+resolution: workspace
+
+dependencies:
+  osgi_api: ^0.1.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
