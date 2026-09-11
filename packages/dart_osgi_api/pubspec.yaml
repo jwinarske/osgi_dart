@@ -1,9 +1,0 @@
-name: dart_osgi_api
-description: Abstract OSGi interfaces for Dart. Pure Dart — no Flutter dependency.
-version: 0.1.0
-publish_to: none
-
-environment:
-  sdk: ^3.10.0
-
-resolution: workspace

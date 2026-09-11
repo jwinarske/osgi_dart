@@ -1,250 +1,134 @@
-# OSGi Dart / Flutter
+# dart_osgi
 
-A Dart-native OSGi framework targeting embedded Linux IVI systems running on
-[ivi-homescreen](https://github.com/toyota-connected/ivi-homescreen). Maps OSGi
-lifecycle, service registry, and event administration concepts to Dart Isolates
-and Flutter engine instances sharing a single Dart VM process.
+An OSGi framework for Dart, for use with [ivi-homescreen](https://github.com/toyota-connected/ivi-homescreen) 3.0.
 
-## Key Design Principles
-
-| Principle | Implementation |
-|---|---|
-| Control plane / data plane split | Registry stores endpoint references (ports, addresses, texture IDs), never data payloads |
-| Single Dart VM | All Flutter bundles share the process VM; `SendPort` works cross-engine without platform channels |
-| Zero-copy by default | Pointer addresses, mmap ring buffers, DMA-BUF fds; `TransferableTypedData` for bulk transfers |
-| CAN via can_engine exclusively | All CAN bus access uses [can_engine](https://github.com/jwinarske/can_dart) |
-| Priority isolation | Framework isolate dual-port; instrument cluster on critical port; startup ordering enforced in C++ |
+The shell already knows how to run several Flutter engines in one process, hold
+a startup deadline for a critical bundle, and tear down one that misses it.
+What it does not have is a Dart-side framework: the lifecycle, the service
+registry, and the transport between the two. That is what lives here.
 
 ## Packages
 
-```
-packages/
-  dart_osgi_api/           Pure Dart abstract interfaces (no Flutter dependency)
-  dart_osgi_framework/     Framework implementation: registry, event admin, isolate bus,
-                           bundle lifecycle, zero-copy transport, performance hardening
-  dart_osgi_flutter/       Flutter-specific helpers: FlutterBundleContext, OsgiBundleApp
-  dart_osgi_test/          Test harness, mock registry, service test builder, DLT logger
-  ivi_homescreen_osgi/     C++ plugin: BundleEngineManager, OsgiBridgePlugin, VsyncCoordinator
-  sensor_bundles/          CAN, LIDAR, IMU service bundles
-  plugin_adapters/         Filament, NavRender, GStreamer, Camera, WebView adapters
-```
+| Package | Depends on Flutter | What it is |
+|---|:---:|---|
+| `osgi_api` | no | Interfaces only: bundle lifecycle, activator, service registry, and the shell transport seam. |
+| `osgi_framework` | no | The framework itself. Runs in the framework isolate. |
+| `osgi_flutter` | yes | The MethodChannel shell transport. Widgets for a bundle to surface its own lifecycle are planned, not written. |
+| `osgi_test` | no | Test doubles, so an activator can be tested without a shell, an engine, or a display. |
 
-## Quick Start
+The split is not cosmetic. A headless bundle -- a CAN decoder, a telemetry sink
+-- has no views, and dragging in a UI binding so it can send three integers to
+the shell is the kind of dependency that later turns out to be load-bearing.
+Such a bundle depends on `osgi_api` and `osgi_framework` and nothing else.
 
-### Install dependencies
+## MethodChannel or FFI?
 
-```bash
-dart pub get
-```
+Both, for different things, and the distinction matters more than the answer.
+There are three data paths and they do not want the same mechanism:
 
-Flutter packages resolve separately:
+**1. Bootstrap and lifecycle** — a bundle announcing itself, and later reporting
+that its activator finished. A handful of messages per bundle, each a few
+integers and a string.
 
-```bash
-flutter pub get --directory=packages/dart_osgi_flutter
-flutter pub get --directory=packages/plugin_adapters
-```
+This is a `MethodChannel` (`dev.osgi/bridge`), and it is the only path that
+crosses into native code. It is the default because it is what runs today: the
+handshake is validated on hardware against a shell that needs no changes to
+accept it (by ivi-homescreen's minimal test activator, which speaks the same
+handshake).
 
-### Run tests
+It has two costs. It couples the ACTIVE report to the platform thread, which is
+at its busiest during exactly the window that report needs to cross -- and a
+critical bundle's startup deadline is running the whole time. It also makes a
+headless bundle initialize a UI binding for no other reason. An FFI transport
+through `libihs_shared.so`, already the documented surface for out-of-tree
+plugins, avoids both.
 
-```bash
-dart test packages/dart_osgi_framework/test/ packages/dart_osgi_test/test/
-```
+**Both transports are kept, and that is a security requirement rather than a
+convenience.** An FFI transport requires every bundle to hold `dart:ffi`, which
+grants arbitrary read and write over the entire process address space and
+`dlopen` of libc — so it is exactly the capability an untrusted bundle must not
+have. Bundles that ship as part of a signed image use FFI; third-party bundles
+are meant to get the channel and no `dart:ffi` at all, at the cost of the fast
+paths below.
 
-### Run tests with coverage
+That is the target, not today. The channel transport still uses `dart:ffi`
+itself: `NativeApi.initializeApiDLData` and `SendPort.nativePort`, which the
+handshake sends to the shell, both live there. An ffi-free tier needs the shell
+to deliver the framework port over the channel instead.
 
-```bash
-dart test --coverage=coverage packages/dart_osgi_framework/test/
-dart pub global activate coverage
-dart pub global run coverage:format_coverage \
-  --lcov --in=coverage --out=coverage/lcov.info --package=. --report-on=lib
-```
+No in-process capability scheme changes this. See
+[DR-001](docs/decisions/DR-001.md) for what was checked and why a proc-address
+design in the style of `eglGetProcAddress` does not hold.
 
-### Analyze
+`ShellTransport` is the interface both implement, so a bundle's code does not
+change when its tier does.
 
-```bash
-dart analyze packages/dart_osgi_api
-dart analyze packages/dart_osgi_framework
-dart analyze packages/dart_osgi_test
-dart analyze packages/sensor_bundles
-dart analyze packages/dart_osgi_flutter
-dart analyze packages/plugin_adapters
-```
+**2. Between bundles** — service lookups, events, registry traffic. High
+frequency, ordinary Dart objects.
 
-## Usage
+This never touches native code at all. All engines in an ivi-homescreen process
+share one Dart VM, so bundles are isolates in one address space and this is
+`SendPort` between them. Routing it through a platform channel would marshal
+every call through the platform thread to reach a destination in the same
+process.
 
-### Standalone framework
+**3. Bulk payloads** — point clouds, camera frames, decoded video.
 
-```dart
-import 'package:dart_osgi_framework/dart_osgi_framework.dart';
+Anything that copies is not viable at frame rate. `Pointer.address` travels as
+an `int` over a `SendPort` and the receiving isolate reconstitutes the pointer;
+isolates share the process address space, so nothing is copied. This is the
+zero-copy path, and it does not need FFI *calls* to work -- only FFI *pointers*.
 
-void main() async {
-  final fw = DartOSGiFramework.instance;
-  fw.start();
+So "MethodChannel vs zero-copy FFI" is a false choice for path 1, and paths 2
+and 3 are already zero-copy without either being involved.
 
-  // Install a bundle from a manifest
-  final manifest = BundleManifest.parse('''
-bundle:
-  symbolicName: com.example.hello
-  version: 1.0.0
-  type: dart
-  activator: lib/activator.dart
-  exports:
-    - com.example.HelloService
-''');
+**Paths 2 and 3 both depend on bundles sharing one Dart VM.** A bundle isolated
+into its own process for the reasons above loses both, and everything it sends
+goes over the channel. That is the real price of the untrusted tier, and it is
+why DR-001 is a premise-level constraint rather than a transport detail.
 
-  fw.installBundle(manifest);
-  fw.resolveAll();
-  final ctx = fw.startBundle('com.example.hello');
+## Layout
 
-  // Register and look up services
-  ctx.registerService<String>(
-    'com.example.HelloService', 'Hello!', {'lang': 'en'},
-  );
-  final ref = ctx.getServiceReference<String>('com.example.HelloService');
-  print(fw.registry.getService(ref!)); // Hello!
+Native [pub workspaces](https://dart.dev/tools/pub/workspaces) (Dart 3.6+)
+rather than melos -- one lockfile, one `.dart_tool`, no extra tool to keep
+current.
 
-  // EventAdmin pub/sub
-  final eventAdmin = EventAdmin();
-  eventAdmin.subscribe('com/example/*').listen(print);
-  eventAdmin.post('com/example/STARTED', const {'status': 'ok'});
+`osgi_flutter` depends on the Flutter SDK and a workspace resolves as a unit, so
+resolve with `flutter pub get`, not `dart pub get`. The three pure-Dart packages
+still analyze and test with plain `dart`.
 
-  await fw.stop();
-}
-```
-
-### Writing a bundle activator
-
-```dart
-class MyActivator implements BundleActivator {
-  ServiceRegistration<MyService>? _reg;
-
-  @override
-  Future<void> start(BundleContext ctx) async {
-    _reg = ctx.registerService<MyService>(
-      'com.ivi.MyService', MyServiceImpl(), {'version': '1.0'},
-    );
-  }
-
-  @override
-  Future<void> stop(BundleContext ctx) async {
-    await _reg?.unregister();
-  }
-}
+```sh
+flutter pub get
+dart analyze
+(cd packages/osgi_api       && dart test)
+(cd packages/osgi_framework && dart test)
+(cd packages/osgi_test      && dart test)
+(cd packages/osgi_flutter   && flutter test)
 ```
 
-### Testing bundles
+> Run `dart test` from each package root rather than passing directories to one
+> invocation: `osgi_test`'s own library file is `lib/osgi_test.dart`, which
+> matches the runner's `*_test.dart` glob when it recurses.
 
-```dart
-import 'package:dart_osgi_test/dart_osgi_test.dart';
-import 'package:test/test.dart';
+## Status
 
-void main() {
-  late BundleTestHarness harness;
+Early. The transport seam, the lifecycle model, an in-process service registry
+with LDAP filters, and an in-process event admin are implemented and tested. Not
+yet written: the `BundleContext` implementation and lifecycle manager, the
+framework isolate, the FFI transport, and the lifecycle widgets.
 
-  setUp(() async {
-    harness = BundleTestHarness();
-    harness.services
-      .when('com.ivi.can.CanEngineService')
-      .thenReturn(mockCanEngine);
-    harness.services.apply();
-    await harness.start();
-  });
+The shell side is merged in ivi-homescreen `v3.0` (#419–#431), and its
+critical-first startup ordering has been proven on hardware with a minimal
+activator. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for what exists in
+each package.
 
-  tearDown(() => harness.dispose());
+## Documentation
 
-  test('bundle registers signals', () async {
-    await harness.installAndStartFromYaml(canBundleYaml);
-    expect(
-      harness.registry.registrations,
-      contains(predicate<RegisterCall>(
-        (c) => c.className.startsWith('com.ivi.can.signal.'),
-      )),
-    );
-  });
-}
-```
-
-### Bundle manifest (bundle.yaml)
-
-```yaml
-bundle:
-  symbolicName: com.ivi.instrument-cluster
-  version: 1.0.0
-  type: flutter
-  activator: lib/activator.dart
-  flutterAsset: build/cluster
-  startup:
-    priority: critical
-    timeout_ms: 500
-  imports:
-    - com.ivi.can.CanBusService: ">=1.0.0"
-  exports:
-    - com.ivi.cluster.ClusterService
-  vm_args:
-    - "--old_gen_heap_size=32"
-    - "--new_gen_semi_max_size=4"
-  cpu_affinity: 0
-  priority_port: true
-```
-
-### Multi-bundle config (ivi-homescreen)
-
-```json
-{
-  "global": { "app_id": "ivi_cluster" },
-  "osgi": {
-    "framework_core": 0,
-    "bundles": [
-      { "path": "bundles/instrument-cluster", "priority": "critical" },
-      { "path": "bundles/can-service",        "priority": "critical" },
-      { "path": "bundles/navigation",         "priority": "normal"   },
-      { "path": "bundles/media-player",       "priority": "normal"   }
-    ]
-  }
-}
-```
-
-## Architecture
-
-### Zero-Copy Transport
-
-| Data type | Transport | Copies |
-|---|---|---|
-| CAN frames | can_engine shared-memory snapshot | Per can_engine impl |
-| DBC signal values | Dart decode, same isolate | Zero |
-| Large buffers (LIDAR) | `Pointer.address` as `int` via `SendPort` | Zero |
-| High-freq sensors (IMU) | mmap SPSC ring buffer (Rust FFI) | Zero |
-| Video frames | GStreamer EGL external texture | Zero (GPU-only) |
-| Service property maps | `const Map` sent by VM reference | Zero |
-| Audio / bulk transfers | `TransferableTypedData` | One-time O(1) move |
-
-**Caveat**: `Pointer.asTypedList(finalizer:)` is isolate-bound, not
-isolate-group-bound ([dart-lang/sdk #55800](https://github.com/dart-lang/sdk/issues/55800)).
-Always use raw `Pointer.address` for cross-isolate zero-copy.
-
-### Startup Sequence
-
-1. C++ `BundleStartupOrchestrator` reads `default_config.json`
-2. **Critical** bundles start synchronously, block until ACTIVE (max 500ms)
-3. **Normal** bundles start staggered 50ms apart
-4. **Background** bundles start after all normal bundles
-
-### Framework Isolate Priority
-
-The framework isolate runs dual `ReceivePort`s. The scheduler drains
-**all** priority messages before processing **one** normal message per
-event loop turn. Only bundles with `priority_port: true` in their
-manifest access the critical port.
-
-## CI
-
-GitHub Actions workflow runs on push/PR to `main` and `v2.0`:
-
-- **Format** check across all pure Dart packages
-- **Analyze** per package (Dart and Flutter separately)
-- **Test** with LCOV coverage uploaded to Codecov
-- **clang-format** advisory check on C++ files
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the process, the three data
+  paths, the lifecycle, and the handshake from a bundle's side.
+- [docs/decisions/DR-001.md](docs/decisions/DR-001.md) — why third-party
+  bundles cannot be isolated in-process.
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).

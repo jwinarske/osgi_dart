@@ -1,42 +1,8 @@
-# Dart/Flutter
 .dart_tool/
-.packages
 build/
+doc/api/
+
+# These are libraries, not applications. Committing the lockfile would pin CI to
+# one resolution and hide the case that actually breaks published packages: a
+# consumer resolving against newer versions of the same constraints.
 pubspec.lock
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# IDE
-.idea/
-*.iml
-.vscode/
-
-# C++
-*.o
-*.so
-*.a
-*.dylib
-cmake-build-*/
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
-
-# Rust (sensor_bundles FFI)
-target/
-*.rlib
-
-# Native code generation
-*.g.dart
-*.freezed.dart
-*.native_assets.yaml
-
-# Coverage
-coverage/
-
-# Claude Code
-.claude/
-
-# OS
-.DS_Store
-Thumbs.db
