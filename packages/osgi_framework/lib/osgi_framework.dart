@@ -12,5 +12,6 @@ export 'package:osgi_api/osgi_api.dart';
 export 'src/event.dart';
 export 'src/event_admin.dart';
 export 'src/ldap_filter.dart';
+export 'src/managed_bundle.dart';
 export 'src/service_registry.dart';
 export 'src/topic_filter.dart';

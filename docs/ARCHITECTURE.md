@@ -16,7 +16,7 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | MethodChannel transport | `osgi_flutter` | Done for `role: bundle`; `role: framework` not implemented |
 | Service registry | `osgi_framework` | In-process only; LDAP filters without substring matching |
 | Fake shell transport | `osgi_test` | Done |
-| `BundleContext` implementation and lifecycle manager | `osgi_framework` | Not started |
+| `BundleContext` and lifecycle manager | `osgi_framework` | `ManagedBundle` runs one bundle's activator; in-process registry |
 | Framework isolate and inter-bundle `SendPort` protocol | `osgi_framework` | Not started |
 | Event admin | `osgi_framework` | In-process only; not yet posting bundle lifecycle events |
 | FFI transport (`ihs_osgi_*`) | — | Not started; C headers drafted in ivi-homescreen, not wired in |
@@ -132,8 +132,31 @@ On an rpi4, a minimal activator released its critical wait in about 200 ms
 against an 8 s deadline, before the normal bundle started (ivi-homescreen #429).
 
 During startup the shell's state machine is the authoritative one. How the Dart
-lifecycle manager — not yet written — keeps its own view consistent beyond the
-ACTIVE and STOPPED reports is an open design question.
+side keeps its own view consistent beyond the ACTIVE and STOPPED reports is
+still an open design question.
+
+### The Dart side: `ManagedBundle`
+
+`ManagedBundle` in `osgi_framework` runs one bundle's activator against the
+shell. It begins at RESOLVED, because `INSTALLED → RESOLVED` is the shell's
+business: by the time Dart runs, the engine exists.
+
+- `start()` registers with the shell, runs the activator, and reports ACTIVE
+  **only after `start()` returns** — that report is what releases a critical
+  bundle's startup wait.
+- A failure anywhere in that sequence unwinds through `STARTING → STOPPING →
+  RESOLVED`, which is what that edge in the table is for. ACTIVE is never
+  reported on the failure path, and the bundle can start again afterwards.
+- **Teardown always completes, then the error surfaces.** An activator whose
+  `stop()` throws still has its services released and its registration
+  dropped. On the start path the original start error wins, since a secondary
+  teardown failure would otherwise bury the reason the bundle never came up.
+- Services and trackers created through the `BundleContext` are released when
+  the bundle stops, so an activator's `stop()` need not be exhaustive, and one
+  running after a partial start need not know how far the start got.
+- The context is dead after that: registering or tracking through it throws.
+  The usual cause is an asynchronous callback that outlived the activator, and
+  publishing from one would leave a service nothing owns.
 
 ## The handshake, from a bundle's side
 

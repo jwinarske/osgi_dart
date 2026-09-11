@@ -17,4 +17,8 @@ dependencies:
 
 dev_dependencies:
   lints: ^5.0.0
+  # A development-only cycle: osgi_test depends on this package. It is here so
+  # the lifecycle is tested through the same double a bundle author uses,
+  # rather than a second fake that could drift from it.
+  osgi_test: ^0.1.0
   test: ^1.25.0
