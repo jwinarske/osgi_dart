@@ -133,9 +133,10 @@ class MethodChannelShellTransport implements ShellTransport {
         'no dev.osgi/bridge channel: ${e.message ?? ''}',
       );
     } on PlatformException catch (e) {
-      // `rejected` here means no `init` was made under this name. It does not
-      // catch a config typo: a name matching no [[osgi.bundles]] entry is
-      // accepted, and the shell ignores its reports.
+      // `rejected` here means no `init` was made under this name -- including
+      // the case where `init` was itself refused because the name matches no
+      // [[osgi.bundles]] entry, which the shell now declines outright rather
+      // than accepting and ignoring its reports (ivi-homescreen #537).
       throw ShellRejectedException(e.code, e.message ?? '');
     }
   }
