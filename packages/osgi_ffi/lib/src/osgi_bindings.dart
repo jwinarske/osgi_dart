@@ -82,7 +82,13 @@ abstract interface class OsgiBindings {
 }
 
 /// `IhsOsgiPeerInfo`.
-final class _PeerInfo extends Struct {
+///
+/// Internal but deliberately not private: `test/abi_conformance_test.dart`
+/// pins this layout against the C header's, and a library-private class cannot
+/// be referenced from a test at all. It stays out of `lib/osgi_ffi.dart`, so it
+/// is not part of the package's public surface -- re-privatising it would
+/// silently delete the only check that the two declarations still agree.
+final class PeerInfo extends Struct {
   @Size()
   external int structSize;
 
@@ -93,11 +99,11 @@ final class _PeerInfo extends Struct {
 }
 
 /// `IhsOsgiBundleInfo`.
-final class _BundleInfo extends Struct {
+final class BundleInfo extends Struct {
   @Size()
   external int structSize;
 
-  external _PeerInfo peer;
+  external PeerInfo peer;
 
   external Pointer<Utf8> symbolicName;
 }
@@ -106,9 +112,9 @@ typedef _AvailableNative = Bool Function();
 typedef _AvailableDart = bool Function();
 
 typedef _RegisterBundleNative =
-    Int32 Function(Pointer<_BundleInfo>, Pointer<Pointer<Void>>);
+    Int32 Function(Pointer<BundleInfo>, Pointer<Pointer<Void>>);
 typedef _RegisterBundleDart =
-    int Function(Pointer<_BundleInfo>, Pointer<Pointer<Void>>);
+    int Function(Pointer<BundleInfo>, Pointer<Pointer<Void>>);
 
 typedef _ReportNative = Int32 Function(Pointer<Void>);
 typedef _ReportDart = int Function(Pointer<Void>);
@@ -173,12 +179,12 @@ class NativeOsgiBindings implements OsgiBindings {
     required SendPort replyTo,
     required String symbolicName,
   }) {
-    final Pointer<_BundleInfo> info = calloc<_BundleInfo>();
+    final Pointer<BundleInfo> info = calloc<BundleInfo>();
     final Pointer<Pointer<Void>> outBundle = calloc<Pointer<Void>>();
     final Pointer<Utf8> name = symbolicName.toNativeUtf8();
     try {
-      info.ref.structSize = sizeOf<_BundleInfo>();
-      info.ref.peer.structSize = sizeOf<_PeerInfo>();
+      info.ref.structSize = sizeOf<BundleInfo>();
+      info.ref.peer.structSize = sizeOf<PeerInfo>();
       // The two things native code cannot obtain for itself: the symbol table
       // it binds Dart_PostCObject_DL from, and a port it can post to. Every
       // caller sends the first because any isolate may arrive first; the shell
