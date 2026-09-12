@@ -96,12 +96,52 @@ class FrameworkServer {
   }
 
   Future<void> _serve(FrameworkRequest request) async {
+    // Identity comes from the port a request arrived on, not from the name
+    // written into it. Everything below this line names a bundle, and a bundle
+    // that could name another would be able to detach it, withdraw its
+    // services, or send as it.
+    //
+    // ReleaseBundle is the deliberate exception: the bundle it names is dead
+    // and cannot send anything, so the check cannot apply. AttachBundle is the
+    // other, because it is what establishes the binding being checked.
+    if (request is! AttachBundle && request is! ReleaseBundle) {
+      final SendPort? bound = _inboxes[request.bundle];
+      if (bound == null || bound != request.replyTo) {
+        request.replyTo.send(
+          RequestFailed(
+            request.id,
+            bound == null
+                ? 'bundle "${request.bundle}" is not attached'
+                : 'this port did not attach as "${request.bundle}"',
+          ),
+        );
+        return;
+      }
+    }
+
     switch (request) {
       case AttachBundle():
+        final SendPort? bound = _inboxes[request.bundle];
+        if (bound != null && bound != request.replyTo) {
+          // Rebinding a live name silently would be the way to steal one.
+          request.replyTo.send(
+            RequestFailed(
+              request.id,
+              'bundle "${request.bundle}" is already attached on another port',
+            ),
+          );
+          return;
+        }
         _inboxes[request.bundle] = request.replyTo;
         request.replyTo.send(Acknowledged(request.id));
 
       case DetachBundle():
+        await _detach(request.bundle);
+        request.replyTo.send(Acknowledged(request.id));
+
+      case ReleaseBundle():
+        // A supervisor letting go of a bundle that died. Same teardown as a
+        // detach; the difference is only who may ask.
         await _detach(request.bundle);
         request.replyTo.send(Acknowledged(request.id));
 

@@ -71,6 +71,13 @@ sealed class FrameworkRequest {
 
 /// Announce a bundle and the port it receives on, so other bundles can reach
 /// it and so the framework can clean up after it.
+///
+/// This is also where identity is established. Every later request names a
+/// bundle, and the framework checks that the request arrived on the port that
+/// attached under that name -- so a bundle cannot act as another by writing a
+/// different name into a message. Attaching a name that is already bound to a
+/// different port is refused rather than silently rebinding it, since that
+/// would be the way to steal one.
 class AttachBundle extends FrameworkRequest {
   const AttachBundle({
     required super.id,
@@ -81,8 +88,32 @@ class AttachBundle extends FrameworkRequest {
 
 /// Release everything the bundle holds: its services, its trackers, and its
 /// place in the routing table. Sent when the bundle stops.
+///
+/// Must arrive on the port that attached under this name. A bundle detaching
+/// another would strand that bundle's consumers while it carried on running.
 class DetachBundle extends FrameworkRequest {
   const DetachBundle({
+    required super.id,
+    required super.bundle,
+    required super.replyTo,
+  });
+}
+
+/// Release a bundle that cannot release itself.
+///
+/// The supervisor operation, separate from [DetachBundle] because it is the one
+/// case where the caller legitimately is not the bundle: an isolate that died
+/// cannot send anything, and without this its services would stay in the
+/// registry pointing at a port nothing listens on.
+///
+/// It is deliberately its own request rather than an exemption inside
+/// [DetachBundle], so the asymmetry is visible in the protocol instead of
+/// hidden in a conditional -- and so authenticating supervisors later means
+/// tightening one message, not unpicking a special case. Today anything holding
+/// the framework port may send it, which is the same trust the shell extends to
+/// a bundle reporting ACTIVE.
+class ReleaseBundle extends FrameworkRequest {
+  const ReleaseBundle({
     required super.id,
     required super.bundle,
     required super.replyTo,
