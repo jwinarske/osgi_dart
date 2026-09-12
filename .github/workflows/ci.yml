@@ -76,6 +76,100 @@ jobs:
         working-directory: packages/osgi_flutter
         run: flutter test
 
+  # The one test that puts a real Dart VM, a real libihs_shared and a real
+  # send-port post together. Everything else fakes one side: the fake bindings
+  # hand the transport a Dart SendPort directly rather than through C, and
+  # ivi-homescreen's suites fake the Dart DL calls because the real ones need a
+  # VM. So the step the whole framework rests on -- Dart_PostCObject_DL putting
+  # a kSendPort into a live isolate's queue, and Dart materialising a usable
+  # SendPort from it -- had never been executed by any test.
+  #
+  # ivi-homescreen's own vkms harness covers this end to end, but only when the
+  # runner's kernel has vkms, which it often does not. This runs unconditionally
+  # in seconds, with no display, engine or DRM master.
+  live-handshake:
+    name: Live FFI handshake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The C surface and the vendored Dart DL sources live upstream. Pinned to
+      # the branch the surface ships on rather than a SHA: this is meant to fail
+      # when that ABI moves, which is the point of running it.
+      # No submodules: the vendored Dart DL sources are tracked files under
+      # third_party/flutter (there is no flutter submodule), and shared/ builds
+      # standalone -- it reaches for rapidjson only under BUILD_MCP, and for the
+      # Flutter public headers only if they happen to be present. Recursing
+      # would clone ten unrelated dependencies to compile two C files.
+      - name: Check out ivi-homescreen
+        uses: actions/checkout@v4
+        with:
+          repository: toyota-connected/ivi-homescreen
+          ref: v3.0
+          path: ivi-homescreen
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve the workspace
+        run: flutter pub get
+
+      - name: Install build deps
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      # shared/ establishes its own project() when it is the top-level source,
+      # so this needs no Wayland/Flutter/DRM stack -- just a C++ toolchain.
+      - name: Build and install ihs_shared (ENABLE_OSGI=ON)
+        working-directory: ivi-homescreen
+        run: |
+          cmake -S shared -B build -G Ninja \
+            -DENABLE_OSGI=ON \
+            -DCMAKE_INSTALL_PREFIX="$PWD/prefix"
+          cmake --build build
+          cmake --install build
+
+      # ihs_osgi_host.h is deliberately never installed -- it is the shell-only
+      # host seam, and publishing it would invite an out-of-tree caller to
+      # install a second host. So the shim includes it from the source tree, the
+      # same way in-tree users do, and links the installed library.
+      - name: Build the test host shim
+        run: |
+          set -euo pipefail
+          IVI="$PWD/ivi-homescreen"
+          DL="$IVI/third_party/flutter/third_party/dart/runtime/include"
+          LIBDIR="$(dirname "$(find "$IVI/prefix" -name 'libihs_shared.so.1' | head -1)")"
+          gcc -shared -fPIC -std=c11 -Wall \
+            -o "$PWD/libosgi_test_host.so" \
+            packages/osgi_ffi/test/native/osgi_test_host.c \
+            "$DL/dart_api_dl.c" \
+            -I"$IVI/shared/include" -I"$IVI/prefix/include" -I"$DL" \
+            -L"$LIBDIR" -lihs_shared -Wl,-rpath,"$LIBDIR"
+          echo "IHS_SHARED_PATH=$LIBDIR/libihs_shared.so.1" >> "$GITHUB_ENV"
+          echo "IHS_OSGI_SHIM_PATH=$PWD/libosgi_test_host.so" >> "$GITHUB_ENV"
+
+      # Without the two paths above this test skips, and a skipped run is what
+      # this job exists to make impossible: it would report success having
+      # proved nothing.
+      #
+      # Matching the test's name does NOT establish that, because the expanded
+      # reporter prints every name whether it ran or was skipped. The reporter's
+      # own summary is what distinguishes them, so assert on that: no "Skip:"
+      # lines, and a positive pass count.
+      - name: Run it
+        working-directory: packages/osgi_ffi
+        run: |
+          set -euo pipefail
+          dart test test/live_handshake_test.dart --reporter expanded \
+            | tee out.txt
+          if grep -q '^  Skip:' out.txt || grep -q 'All tests skipped' out.txt; then
+            echo "::error::the live handshake skipped; it must run in this job"
+            exit 1
+          fi
+          grep -Eq '\+[1-9][0-9]*: All tests passed!' out.txt
+
   # Coverage is a separate job rather than extra flags on the one above, for
   # two reasons: the test signal stays fast and unconditional, and a failure in
   # the coverage tooling cannot turn a green suite red. It is instrumentation,
