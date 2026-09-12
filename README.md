@@ -112,12 +112,13 @@ dart analyze
 
 ## Status
 
-Early. Implemented and tested: the transport seam, the lifecycle model, an
-in-process service registry with LDAP filters, an in-process event admin, and
-the bundle lifecycle itself -- `ManagedBundle`, which runs one bundle's
-activator against the shell and reports ACTIVE when it has really finished. Not
-yet written: the framework isolate, the FFI transport, and the lifecycle
-widgets.
+Early. Implemented and tested: the transport seam, the lifecycle model, a
+service registry with LDAP filters, an event admin, the bundle lifecycle --
+`ManagedBundle`, which runs one bundle's activator against the shell and
+reports ACTIVE when it has really finished -- and the first step of the
+framework isolate, which lets bundles in separate isolates publish and find
+each other's services. Not yet written: spawning bundle isolates, the FFI
+transport, and the lifecycle widgets.
 
 The shell side is merged in ivi-homescreen `v3.0` (#419–#431), and its
 critical-first startup ordering has been proven on hardware with a minimal
