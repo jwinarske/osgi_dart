@@ -75,3 +75,60 @@ jobs:
       - name: Test osgi_flutter
         working-directory: packages/osgi_flutter
         run: flutter test
+
+  # Coverage is a separate job rather than extra flags on the one above, for
+  # two reasons: the test signal stays fast and unconditional, and a failure in
+  # the coverage tooling cannot turn a green suite red. It is instrumentation,
+  # not a gate -- there is deliberately no threshold, because every defect found
+  # in this framework so far (a tracker replay race, a detach deadlock, a
+  # message case never handled) sat in lines that were already covered.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve the workspace
+        run: flutter pub get
+
+      - name: Install the coverage tool
+        run: dart pub global activate coverage
+
+      # --report-on=lib is load-bearing: without it the report covers the test
+      # files themselves, which measures nothing about the library.
+      - name: Collect (pure-Dart packages)
+        run: |
+          set -euo pipefail
+          for p in osgi_api osgi_ffi osgi_framework osgi_test; do
+            ( cd "packages/$p"
+              dart test --coverage=coverage
+              dart pub global run coverage:format_coverage \
+                --lcov --in=coverage --out=coverage/lcov.info \
+                --report-on=lib )
+          done
+
+      # flutter test writes lcov directly, so it needs no conversion.
+      - name: Collect (osgi_flutter)
+        working-directory: packages/osgi_flutter
+        run: flutter test --coverage
+
+      - name: Summarise
+        run: |
+          sudo apt-get update && sudo apt-get install -y lcov
+          for f in packages/*/coverage/lcov.info; do
+            echo "== $f"
+            lcov --summary "$f" 2>&1 | grep -E 'lines|functions' || true
+          done
+
+      - name: Upload lcov
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-coverage
+          path: packages/*/coverage/lcov.info
+          retention-days: 7
