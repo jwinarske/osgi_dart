@@ -13,7 +13,7 @@ registry, and the transport between the two. That is what lives here.
 |---|:---:|---|
 | `osgi_api` | no | Interfaces only: bundle lifecycle, activator, service registry, and the shell transport seam. |
 | `osgi_framework` | no | The framework itself. Runs in the framework isolate. |
-| `osgi_flutter` | yes | The MethodChannel shell transport. Widgets for a bundle to surface its own lifecycle are planned, not written. |
+| `osgi_flutter` | yes | The MethodChannel shell transport. No widgets: a bundle that wants to show its own lifecycle renders `ManagedBundle.states` directly. |
 | `osgi_test` | no | Test doubles, so an activator can be tested without a shell, an engine, or a display. |
 
 The split is not cosmetic. A headless bundle -- a CAN decoder, a telemetry sink
@@ -118,7 +118,15 @@ service registry with LDAP filters, an event admin, the bundle lifecycle --
 reports ACTIVE when it has really finished -- the framework isolate, which lets
 bundles in separate isolates publish and find each other's services, and a
 loader that spawns a pure-Dart bundle into its own isolate and runs it there.
-Not yet written: the FFI transport and the lifecycle widgets.
+Not yet written: the FFI transport.
+
+No lifecycle widgets are supplied, and that is a decision rather than a gap.
+`ManagedBundle.state` is a `BundleState` and `ManagedBundle.states` a
+`Stream<BundleState>`, so a bundle that wants to show its own lifecycle wraps
+the stream in a `StreamBuilder` and renders whatever suits it -- `isLive` and
+`isTerminal` are on `BundleState` for exactly that. A widget set here would have
+to guess at the shape (an overlay? a banner? a gate holding the tree back until
+ACTIVE?), and every bundle that disagreed would carry the guess anyway.
 
 The shell side is merged in ivi-homescreen `v3.0` (#419–#431), and its
 critical-first startup ordering has been proven on hardware with a minimal

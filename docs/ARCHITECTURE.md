@@ -21,7 +21,7 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | Spawning pure-Dart bundles | `osgi_framework` | `BundleLoader`: spawn, run the activator, release a bundle whose isolate died |
 | Event admin | `osgi_framework` | Shared across isolates through `FrameworkServer`; not yet posting bundle lifecycle events |
 | FFI transport (`ihs_osgi_*`) | — | Not started; C headers drafted in ivi-homescreen, not wired in |
-| Lifecycle widgets | `osgi_flutter` | Not started |
+| Lifecycle widgets | — | Not planned — a bundle renders `ManagedBundle.states` in a `StreamBuilder` itself |
 | Location service bundle | — | Planned |
 | Shell side (`shell/osgi/`) | ivi-homescreen | Merged (#419–#431); critical-first ordering proven on rpi4 |
 
