@@ -65,6 +65,8 @@
 /// isolation work.)
 library;
 
+import 'dart:isolate';
+
 /// The result of a bootstrap handshake.
 ///
 /// [frameworkPort] is the framework isolate's port, which the shell delivers
@@ -79,7 +81,12 @@ class ShellBinding {
   /// Completes when the shell hands over the framework isolate's port. May
   /// already be complete on return, or may complete later; both orderings are
   /// normal and neither is an error.
-  final Future<int> frameworkPort;
+  ///
+  /// A [SendPort] rather than a port id, because a port id is useless here:
+  /// Dart offers no way to turn one back into a [SendPort]. The shell posts it
+  /// as a send-port object for that reason, and this is what a bundle hands to
+  /// the framework client to start talking.
+  final Future<SendPort> frameworkPort;
 }
 
 /// Raised when the shell refuses a bundle's handshake.

@@ -5,6 +5,7 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
@@ -82,7 +83,7 @@ class ManagedBundle {
   ///
   /// On a transport with no shell behind it this completes with an error
   /// rather than hanging -- see [DetachedShellTransport].
-  Future<int>? get frameworkPort => _binding?.frameworkPort;
+  Future<SendPort>? get frameworkPort => _binding?.frameworkPort;
 
   /// Register with the shell, run the activator, and report ACTIVE.
   ///

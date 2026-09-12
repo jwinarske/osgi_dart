@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:osgi_flutter/osgi_flutter.dart';
@@ -164,7 +166,7 @@ void main() {
     final ShellBinding binding = await transport.register('com.ivi.cluster');
 
     final Future<Object?> outcome = binding.frameworkPort.then<Object?>(
-      (int p) => p,
+      (SendPort p) => p,
       onError: (Object e) => e,
     );
 

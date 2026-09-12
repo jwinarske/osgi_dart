@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 import 'package:osgi_test/osgi_test.dart';
@@ -17,7 +18,7 @@ class _SampleActivator {
   /// does not should never wait on it.
   final bool needsPeers;
 
-  int? frameworkPort;
+  SendPort? frameworkPort;
   Object? failure;
 
   Future<void> start() async {
@@ -34,8 +35,15 @@ class _SampleActivator {
 }
 
 void main() {
+  late ReceivePort framework;
+
+  setUp(() => framework = ReceivePort('fake.framework'));
+  tearDown(() => framework.close());
+
   test('the happy path reports ACTIVE', () async {
-    final FakeShellTransport shell = FakeShellTransport(autoFrameworkPort: 42);
+    final FakeShellTransport shell = FakeShellTransport(
+      autoFrameworkPort: framework.sendPort,
+    );
     final _SampleActivator activator = _SampleActivator(
       shell,
       'com.ivi.cluster',
@@ -45,7 +53,7 @@ void main() {
 
     expect(shell.methods, <String>['init', 'active']);
     expect(shell.reportedActive('com.ivi.cluster'), isTrue);
-    expect(activator.frameworkPort, 42);
+    expect(activator.frameworkPort, framework.sendPort);
     expect(activator.failure, isNull);
   });
 
@@ -71,11 +79,11 @@ void main() {
         reason: 'ACTIVE must not be sent before the bundle is really ready',
       );
 
-      shell.completeFrameworkPort(7);
+      shell.completeFrameworkPort(framework.sendPort);
       await started;
 
       expect(shell.methods, <String>['init', 'active']);
-      expect(activator.frameworkPort, 7);
+      expect(activator.frameworkPort, framework.sendPort);
     },
   );
 
@@ -129,7 +137,7 @@ void main() {
     final ShellBinding binding = await shell.register('com.ivi.cluster');
 
     final Future<Object?> outcome = binding.frameworkPort.then<Object?>(
-      (int p) => p,
+      (SendPort p) => p,
       onError: (Object e) => e,
     );
 
@@ -158,13 +166,18 @@ void main() {
 
   test('completing a port before registering is a programming error', () {
     final FakeShellTransport shell = FakeShellTransport();
-    expect(() => shell.completeFrameworkPort(1), throwsStateError);
+    expect(
+      () => shell.completeFrameworkPort(framework.sendPort),
+      throwsStateError,
+    );
   });
 
   test(
     'registering twice is refused, as the real transport refuses it',
     () async {
-      final FakeShellTransport shell = FakeShellTransport(autoFrameworkPort: 1);
+      final FakeShellTransport shell = FakeShellTransport(
+        autoFrameworkPort: framework.sendPort,
+      );
       await shell.register('com.ivi.cluster');
 
       await expectLater(
@@ -184,7 +197,9 @@ void main() {
   );
 
   test('a torn-down fake can register again', () async {
-    final FakeShellTransport shell = FakeShellTransport(autoFrameworkPort: 1);
+    final FakeShellTransport shell = FakeShellTransport(
+      autoFrameworkPort: framework.sendPort,
+    );
     await shell.register('com.ivi.cluster');
     await shell.unregister('com.ivi.cluster');
 

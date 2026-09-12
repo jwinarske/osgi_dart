@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
@@ -38,6 +39,52 @@ class RegistryScope implements BundleScope {
   @override
   Future<void> close() async {
     await _context?.release();
+    _context = null;
+  }
+}
+
+/// A context built from the port the shell hands over during the handshake.
+///
+/// This is the shell-spawned path. The bundle cannot build its context up
+/// front, because the framework port arrives *during* start: the shell posts it
+/// after `init`, and the framework isolate may not even be up yet. [open] runs
+/// after [ShellTransport.register] has returned, so the port is either already
+/// in hand or on its way, and awaiting it here is the natural place to block.
+///
+/// A bundle that waits on this is a bundle that needs its peers. One with no
+/// peers should not use this scope at all -- the port may arrive long after
+/// registration, and a critical bundle's startup deadline is running the whole
+/// time.
+class ShellFrameworkScope implements BundleScope {
+  ShellFrameworkScope({this.requestTimeout});
+
+  /// Passed through to the [RemoteBundleContext] this builds.
+  final Duration? requestTimeout;
+
+  RemoteBundleContext? _context;
+
+  @override
+  Future<BundleContext> open(ManagedBundle bundle) async {
+    final Future<SendPort>? delivered = bundle.frameworkPort;
+    if (delivered == null) {
+      throw StateError(
+        'no framework port for "${bundle.symbolicName}": the shell delivers it '
+        'during registration, so this scope can only open after register()',
+      );
+    }
+    final RemoteBundleContext context = RemoteBundleContext(
+      symbolicName: bundle.symbolicName,
+      framework: await delivered,
+      requestTimeout: requestTimeout,
+    );
+    _context = context;
+    await context.attach();
+    return context;
+  }
+
+  @override
+  Future<void> close() async {
+    await _context?.detach();
     _context = null;
   }
 }

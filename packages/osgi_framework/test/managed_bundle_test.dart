@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_framework/osgi_framework.dart';
 import 'package:osgi_test/osgi_test.dart';
@@ -33,10 +34,15 @@ void main() {
   late FakeShellTransport shell;
   late ServiceRegistry registry;
 
+  late ReceivePort frameworkInbox;
+
   setUp(() {
-    shell = FakeShellTransport(autoFrameworkPort: 7);
+    frameworkInbox = ReceivePort('fake.framework');
+    shell = FakeShellTransport(autoFrameworkPort: frameworkInbox.sendPort);
     registry = ServiceRegistry();
   });
+
+  tearDown(() => frameworkInbox.close());
 
   ManagedBundle bundleOf(
     BundleActivator activator, {
@@ -97,7 +103,7 @@ void main() {
 
         await bundle.start();
 
-        expect(await bundle.frameworkPort, 7);
+        expect(await bundle.frameworkPort, frameworkInbox.sendPort);
         await bundle.dispose();
       },
     );

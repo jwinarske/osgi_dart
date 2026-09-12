@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
@@ -48,7 +49,11 @@ class FakeShellTransport implements ShellTransport {
 
   /// If set, [register] completes the framework port with this immediately.
   /// Leave null to control the timing with [completeFrameworkPort].
-  final int? autoFrameworkPort;
+  ///
+  /// A [SendPort] because that is what the shell delivers: a port id would be
+  /// useless to the bundle, which cannot turn one back into a [SendPort]. Pass
+  /// a `FrameworkServer`'s port here to wire a bundle to a real framework.
+  final SendPort? autoFrameworkPort;
 
   /// If set, [register] throws [ShellRejectedException] with this code. The
   /// realistic value is `rejected`, which the shell returns for a symbolic name
@@ -65,7 +70,7 @@ class FakeShellTransport implements ShellTransport {
   /// Every call, in order. This is the assertion surface.
   final List<ShellCall> calls = <ShellCall>[];
 
-  Completer<int>? _frameworkPort;
+  Completer<SendPort>? _frameworkPort;
 
   String? _registeredName;
 
@@ -77,8 +82,8 @@ class FakeShellTransport implements ShellTransport {
 
   /// Deliver the framework isolate's port, as the shell would, at whatever
   /// moment the test wants.
-  void completeFrameworkPort(int port) {
-    final Completer<int>? pending = _frameworkPort;
+  void completeFrameworkPort(SendPort port) {
+    final Completer<SendPort>? pending = _frameworkPort;
     if (pending == null) {
       throw StateError('not registered; no one is waiting for a port');
     }
@@ -106,7 +111,7 @@ class FakeShellTransport implements ShellTransport {
       throw ShellRejectedException(reject, 'rejected by fake');
     }
 
-    final Completer<int> port = Completer<int>();
+    final Completer<SendPort> port = Completer<SendPort>();
     _frameworkPort = port;
     _registeredName = symbolicName;
     // Same reason as the real transport: a bundle that never awaits the port is
@@ -114,7 +119,7 @@ class FakeShellTransport implements ShellTransport {
     // an unrelated expectation.
     unawaited(port.future.then<void>((_) {}, onError: (Object _) {}));
 
-    final int? auto = autoFrameworkPort;
+    final SendPort? auto = autoFrameworkPort;
     if (auto != null) port.complete(auto);
     if (!_registered.isCompleted) _registered.complete();
 
@@ -145,7 +150,7 @@ class FakeShellTransport implements ShellTransport {
   Future<void> unregister(String symbolicName) async {
     calls.add(ShellCall('shutdown', symbolicName));
     _registeredName = null;
-    final Completer<int>? pending = _frameworkPort;
+    final Completer<SendPort>? pending = _frameworkPort;
     _frameworkPort = null;
     if (pending != null && !pending.isCompleted) {
       pending.completeError(
