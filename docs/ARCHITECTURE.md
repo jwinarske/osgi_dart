@@ -230,9 +230,11 @@ Verified at `cb0057b2`:
    both `dart:ffi` APIs, so the channel is not yet the ffi-free tier DR-001
    calls for. Getting there needs the shell to deliver the framework port over
    the channel instead (DR-001 consequence 3).
-4. **The bundle side is implemented twice.** ivi-homescreen's
-   `test/integration/osgi_activator_test/lib/main.dart` speaks the handshake
-   directly rather than through `osgi_flutter`.
+4. **The bundle side is implemented twice over.** ivi-homescreen's
+   `test/integration/osgi_activator_test/lib/main.dart` speaks both handshakes
+   directly — the channel, and since #544 the `ihs_osgi_*` one — rather than
+   through `osgi_flutter` and `osgi_ffi`. Deliberate, so that fixture stays
+   self-contained across repositories, but it is duplication that can drift.
 
 ## Trust tiers
 
@@ -451,7 +453,7 @@ In ivi-homescreen:
 | `shell/osgi/osgi_config.{h,cc}` | `[osgi]` and `[[osgi.bundles]]` parsing |
 | `shell/osgi/app_bundle_host.{h,cc}` | Brings a bundle up as an `App` view |
 | `test/osgi_multi_bundle.sh` | Hardware harness: two bundles, two engines, two outputs |
-| `test/integration/osgi_activator_test/` | Minimal activator bundle |
+| `test/integration/osgi_activator_test/` | Minimal activator bundle; speaks either transport (`TRANSPORT=channel\|ffi`) |
 
 ## Further reading
 
