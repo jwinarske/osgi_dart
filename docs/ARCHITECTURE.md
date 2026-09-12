@@ -17,7 +17,8 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | Service registry | `osgi_framework` | Shared across isolates through `FrameworkServer`; LDAP filters without substring matching |
 | Fake shell transport | `osgi_test` | Done |
 | `BundleContext` and lifecycle manager | `osgi_framework` | `ManagedBundle` runs one bundle's activator; in-process registry |
-| Framework isolate and inter-bundle protocol | `osgi_framework` | `FrameworkServer` and `RemoteBundleContext`: services, trackers, routing. No priority ports; bundle spawning not started |
+| Framework isolate and inter-bundle protocol | `osgi_framework` | `FrameworkServer` and `RemoteBundleContext`: services, trackers, routing. No priority ports |
+| Spawning pure-Dart bundles | `osgi_framework` | `BundleLoader`: spawn, run the activator, release a bundle whose isolate died |
 | Event admin | `osgi_framework` | In-process only; not yet posting bundle lifecycle events |
 | FFI transport (`ihs_osgi_*`) | — | Not started; C headers drafted in ivi-homescreen, not wired in |
 | Lifecycle widgets | `osgi_flutter` | Not started |
@@ -305,8 +306,46 @@ delivery order across ports, and nothing in Dart can inspect a port's queue to
 do better. It is left out rather than claimed, until something measures whether
 the weaker guarantee is worth having.
 
-Still missing here: spawning bundle isolates, event admin across isolates, and
-wiring `ManagedBundle` to drive a `RemoteBundleContext`.
+### Spawned pure-Dart bundles
+
+`BundleLoader` spawns a bundle into its own isolate and runs its activator
+there. The lifecycle is the ordinary one — `ManagedBundle` drives it, and a
+failed start unwinds the same way — with two differences that follow from where
+the bundle lives.
+
+**It has no shell.** The shell tracks engines it started from
+`[[osgi.bundles]]`; an isolate spawned by Dart has no engine, so there is
+nothing to register with and nothing waiting on its ACTIVE report. These
+bundles use `DetachedShellTransport`, whose calls all succeed and do nothing.
+Its `frameworkPort` completes with an error rather than hanging, since a bundle
+awaiting a shell-delivered port on this path is asking for something that does
+not exist.
+
+**Its context is remote.** Where a bundle's `BundleContext` comes from is a
+`BundleScope`: `RegistryScope` for a bundle sharing this isolate with the
+registry, `RemoteScope` for one reaching a `FrameworkServer` by message. The
+lifecycle never learns which it has.
+
+**The loader releases a bundle whose isolate died.** A dead isolate cannot
+detach itself, so the loader watches each isolate's exit and detaches on its
+behalf. Without that, a crashed bundle's endpoint would stay in the registry
+pointing at a port nothing listens on. An activator that kills its own isolate
+is a test case, not a hypothetical.
+
+Two gaps worth knowing:
+
+- **The framework trusts the name** on attach, detach and routing. It checks
+  ownership only when a service is withdrawn. That is what lets the loader
+  release a dead bundle, and it also means a bundle could detach another — the
+  same shape as the shell accepting an ACTIVE report for any name (DR-001
+  consequence 2).
+- **A bundle isolate's uncaught async errors are discarded.** The loader watches
+  the error port to keep `errorsAreFatal: false` from being silent about exit,
+  but it does not surface what it hears. Debugging a misbehaving bundle needs
+  that; it is the next thing to fix here.
+
+Still missing: event admin across isolates, and a bundle whose activator the
+shell spawned reaching a `FrameworkServer` in another engine's isolate.
 
 ## Event admin
 
