@@ -239,6 +239,102 @@ void main() {
     });
   });
 
+  group('events', () {
+    test('an event reaches a subscriber in another bundle', () async {
+      final RemoteBundleContext poster = await bundle('com.ivi.can');
+      final RemoteBundleContext listener = await bundle('com.ivi.cluster');
+
+      final List<Event> seen = <Event>[];
+      final StreamSubscription<Event> sub = listener
+          .subscribe('com/ivi/can/*')
+          .listen(seen.add);
+      // Subscribing is itself a message: without this, a post could overtake
+      // the subscription and arrive before anyone is listening for it.
+      await pumpEventQueue();
+
+      poster.post('com/ivi/can/THRESHOLD', const <String, Object?>{
+        'signal': 'EngineTemp',
+        'value': 105.0,
+      });
+      await pumpEventQueue();
+
+      expect(seen, hasLength(1));
+      expect(seen.single.topic, 'com/ivi/can/THRESHOLD');
+      expect(seen.single.property<double>('value'), 105.0);
+      expect(seen.single.property<String>('signal'), 'EngineTemp');
+      await sub.cancel();
+    });
+
+    test('a topic outside the pattern is not delivered', () async {
+      final RemoteBundleContext poster = await bundle('com.ivi.can');
+      final RemoteBundleContext listener = await bundle('com.ivi.cluster');
+
+      final List<Event> seen = <Event>[];
+      final StreamSubscription<Event> sub = listener
+          .subscribe('com/ivi/sensor/*')
+          .listen(seen.add);
+      await pumpEventQueue();
+
+      poster.post('com/ivi/can/THRESHOLD');
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+      await sub.cancel();
+    });
+
+    test('cancelling stops delivery', () async {
+      final RemoteBundleContext poster = await bundle('com.ivi.can');
+      final RemoteBundleContext listener = await bundle('com.ivi.cluster');
+
+      final List<Event> seen = <Event>[];
+      final StreamSubscription<Event> sub = listener
+          .subscribe('com/ivi/can/*')
+          .listen(seen.add);
+      await pumpEventQueue();
+      poster.post('com/ivi/can/ONE');
+      await pumpEventQueue();
+      expect(seen, hasLength(1));
+
+      await sub.cancel();
+      await pumpEventQueue();
+      poster.post('com/ivi/can/TWO');
+      await pumpEventQueue();
+
+      expect(seen, hasLength(1), reason: 'the subscription was released');
+    });
+
+    test('detaching releases the subscription', () async {
+      final RemoteBundleContext poster = await bundle('com.ivi.can');
+      final RemoteBundleContext listener = await bundle('com.ivi.cluster');
+
+      final List<Event> seen = <Event>[];
+      listener.subscribe('com/ivi/can/*').listen(seen.add);
+      await pumpEventQueue();
+
+      await listener.detach();
+      poster.post('com/ivi/can/THRESHOLD');
+      await pumpEventQueue();
+
+      expect(seen, isEmpty);
+    });
+
+    test('a malformed pattern is rejected where it was written', () async {
+      final RemoteBundleContext listener = await bundle('com.ivi.cluster');
+
+      // Not as a subscription that could never match, and not in some other
+      // isolate: here, at the call.
+      expect(() => listener.subscribe('com/ivi/can*'), throwsArgumentError);
+    });
+
+    test('posting after detach does nothing rather than throwing', () async {
+      final RemoteBundleContext poster = await bundle('com.ivi.can');
+
+      await poster.detach();
+
+      expect(() => poster.post('com/ivi/can/THRESHOLD'), returnsNormally);
+    });
+  });
+
   group('routing', () {
     test('a bundle can send to another by name', () async {
       final RemoteBundleContext sender = await bundle('com.ivi.can');

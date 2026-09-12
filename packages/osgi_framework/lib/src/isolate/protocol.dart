@@ -22,6 +22,8 @@ library;
 
 import 'dart:isolate';
 
+import '../event.dart';
+
 /// A service, as seen from outside the isolate that owns it.
 ///
 /// [port] is where its owner listens. [serviceId] is assigned by the framework
@@ -232,4 +234,60 @@ class TrackerEvent {
   final bool added;
 
   final ServiceEndpoint endpoint;
+}
+
+/// Publish an event to every bundle subscribed to its topic.
+///
+/// Unlike a service, an event is a value: copying it across an isolate
+/// boundary is what delivery *means*, not a thing to avoid. No reply comes
+/// back -- posting is asynchronous, and an acknowledgement per event would put
+/// a round trip on a path meant to carry many.
+class PostEvent extends FrameworkRequest {
+  const PostEvent({
+    required super.id,
+    required super.bundle,
+    required super.replyTo,
+    required this.event,
+  });
+
+  final Event event;
+}
+
+/// Start receiving events whose topic matches [topicPattern].
+///
+/// Matches arrive as [EventDelivered] carrying [subscriptionId].
+class SubscribeTopic extends FrameworkRequest {
+  const SubscribeTopic({
+    required super.id,
+    required super.bundle,
+    required super.replyTo,
+    required this.subscriptionId,
+    required this.topicPattern,
+  });
+
+  final int subscriptionId;
+  final String topicPattern;
+}
+
+/// Stop receiving events for one subscription.
+class UnsubscribeTopic extends FrameworkRequest {
+  const UnsubscribeTopic({
+    required super.id,
+    required super.bundle,
+    required super.replyTo,
+    required this.subscriptionId,
+  });
+
+  final int subscriptionId;
+}
+
+/// An event matching a subscription the bundle opened.
+///
+/// Not a reply: it carries a [subscriptionId] rather than a request id, and
+/// arrives whenever someone posts a matching topic.
+class EventDelivered {
+  const EventDelivered({required this.subscriptionId, required this.event});
+
+  final int subscriptionId;
+  final Event event;
 }
