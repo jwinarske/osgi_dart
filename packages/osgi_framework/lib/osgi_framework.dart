@@ -9,8 +9,11 @@ library;
 // has everything it needs to use what this package returns.
 export 'package:osgi_api/osgi_api.dart';
 
+export 'src/bundle_scope.dart';
+export 'src/detached_shell_transport.dart';
 export 'src/event.dart';
 export 'src/event_admin.dart';
+export 'src/isolate/bundle_loader.dart';
 export 'src/isolate/framework_server.dart';
 export 'src/isolate/protocol.dart';
 export 'src/isolate/remote_bundle_context.dart';
