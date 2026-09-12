@@ -58,11 +58,27 @@ class _DyingActivator implements BundleActivator {
   Future<void> stop(BundleContext context) async {}
 }
 
+/// Registers a service, then throws from a later microtask: an error its own
+/// start() never sees and nothing in the bundle catches.
+class _ThrowingActivator implements BundleActivator {
+  @override
+  Future<void> start(BundleContext context) async {
+    await context.registerService('Echo', ReceivePort().sendPort);
+    Future<void>.delayed(const Duration(milliseconds: 20), () {
+      throw StateError('boom, long after start');
+    });
+  }
+
+  @override
+  Future<void> stop(BundleContext context) async {}
+}
+
 // Activator factories must be top-level: a closure cannot cross to a spawned
 // isolate, and an instance would be copied.
 BundleActivator makeEcho() => _EchoActivator();
 BundleActivator makeFailing() => _FailingActivator();
 BundleActivator makeDying() => _DyingActivator();
+BundleActivator makeThrower() => _ThrowingActivator();
 
 void main() {
   late FrameworkServer server;
@@ -179,6 +195,30 @@ void main() {
     await untilGone('Echo');
 
     expect(loader.running, isEmpty);
+  });
+
+  test('an uncaught error surfaces, and does not stop the bundle', () async {
+    // Listen before spawning: errors is a broadcast stream, so an error raised
+    // with nothing listening is dropped. That is the documented limit rather
+    // than a defect.
+    final Future<BundleError> reported = loader.errors.first;
+
+    await loader.spawn(
+      symbolicName: 'com.ivi.noisy',
+      activatorFactory: makeThrower,
+      startTimeout: const Duration(seconds: 20),
+    );
+
+    final BundleError error = await reported.timeout(
+      const Duration(seconds: 20),
+    );
+    expect(error.symbolicName, 'com.ivi.noisy');
+    expect(error.error, contains('boom'));
+
+    // errorsAreFatal is false on purpose: a bundle that throws in a background
+    // timer is still serving what it published.
+    expect(loader.running, contains('com.ivi.noisy'));
+    expect(await observer.lookup('Echo'), isNotNull);
   });
 
   test('spawning the same name twice is a programming error', () async {

@@ -339,10 +339,16 @@ Two gaps worth knowing:
   release a dead bundle, and it also means a bundle could detach another — the
   same shape as the shell accepting an ACTIVE report for any name (DR-001
   consequence 2).
-- **A bundle isolate's uncaught async errors are discarded.** The loader watches
-  the error port to keep `errorsAreFatal: false` from being silent about exit,
-  but it does not surface what it hears. Debugging a misbehaving bundle needs
-  that; it is the next thing to fix here.
+- **An uncaught error is reported, not acted on.** What a bundle throws and
+  never catches arrives on `BundleLoader.errors` as a `BundleError`, carrying
+  the bundle's name and the error as text — an isolate reports uncaught errors
+  as two strings, and an arbitrary error object would not reliably cross
+  anyway. Two limits: it is a broadcast stream, so an error raised while
+  nothing is listening is dropped rather than buffered; and the bundle keeps
+  running, because isolates are spawned with `errorsAreFatal: false` — one that
+  throws in a background timer is still serving what it published. Deciding
+  that such a bundle should be restarted or torn down is policy, and belongs to
+  whatever owns the bundle rather than to the loader.
 
 Still missing: event admin across isolates, and a bundle whose activator the
 shell spawned reaching a `FrameworkServer` in another engine's isolate.
