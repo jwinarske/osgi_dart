@@ -27,7 +27,7 @@ class MethodChannelShellTransport implements ShellTransport {
   /// anywhere.
   ReceivePort? _fromShell;
 
-  Completer<int>? _frameworkPort;
+  Completer<SendPort>? _frameworkPort;
 
   StreamSubscription<dynamic>? _subscription;
 
@@ -44,7 +44,7 @@ class MethodChannelShellTransport implements ShellTransport {
     }
 
     final ReceivePort port = ReceivePort();
-    final Completer<int> frameworkPort = Completer<int>();
+    final Completer<SendPort> frameworkPort = Completer<SendPort>();
     _fromShell = port;
     _frameworkPort = frameworkPort;
     _registeredName = symbolicName;
@@ -57,10 +57,16 @@ class MethodChannelShellTransport implements ShellTransport {
     unawaited(frameworkPort.future.then<void>((_) {}, onError: (Object _) {}));
 
     _subscription = port.listen((dynamic message) {
-      // Arrives as a bare int: the shell sends it with Dart_PostCObject_DL
-      // carrying an int64. Everything after this point is SendPort traffic
-      // between isolates, which never touches the platform thread.
-      if (message is int && !frameworkPort.isCompleted) {
+      // Arrives as a SendPort: the shell posts it with Dart_PostCObject_DL as
+      // a send-port object, because Dart cannot turn a port id back into a
+      // SendPort and an int would therefore be unusable here. Everything after
+      // this point is SendPort traffic between isolates, which never touches
+      // the platform thread.
+      //
+      // Anything else is ignored rather than fatal: a shell still posting the
+      // old int64 leaves the bundle without a framework port, which surfaces
+      // as a bundle that never reaches its peers rather than one that crashes.
+      if (message is SendPort && !frameworkPort.isCompleted) {
         frameworkPort.complete(message);
       }
     });
@@ -140,7 +146,7 @@ class MethodChannelShellTransport implements ShellTransport {
     _fromShell?.close();
     _fromShell = null;
     _registeredName = null;
-    final Completer<int>? pending = _frameworkPort;
+    final Completer<SendPort>? pending = _frameworkPort;
     _frameworkPort = null;
     if (pending != null && !pending.isCompleted) {
       // Whoever is awaiting the port needs to learn it is never coming, rather

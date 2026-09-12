@@ -196,8 +196,16 @@ Channel `dev.osgi/bridge`, `StandardMethodCodec`, arguments always a map
   (`shell/osgi/bridge_registry.h:70-76`). That is why
   `ShellBinding.frameworkPort` is a `Future`: it may complete before `register`
   returns or long after, and both are normal.
-- **The port arrives as a bare `int`** on the bundle's receive port, posted with
-  `Dart_PostCObject_DL`. It never crosses the platform thread.
+- **The port arrives as a `SendPort`** on the bundle's receive port, posted with
+  `Dart_PostCObject_DL` as a send-port object. It never crosses the platform
+  thread. It cannot be an integer: Dart has no way to turn a port id back into
+  a `SendPort` — `dart:ffi`'s `nativePort` runs one way only, and `SendPort` is
+  an abstract interface with no constructor — so a bundle handed a number would
+  have nothing it could send to. The shell posted an `int64` until
+  ivi-homescreen #531 changed `bridge_registry.cc` to post
+  `Dart_CObject_kSendPort`; a bundle running against a shell older than that
+  simply never receives a port, rather than crashing, because the transport
+  ignores a message it does not recognize.
 - **An unknown method** answers not-implemented, which Dart surfaces as
   `MissingPluginException` — the same exception a shell built without
   `ENABLE_OSGI` produces. `MethodChannelShellTransport` reports both as
@@ -374,8 +382,23 @@ isolate and one in its own see the same events, matched the same way.
   subscribing can overtake the subscription. Code that must not miss the first
   event has to let the subscription land first.
 
-Still missing: a bundle whose activator the shell spawned reaching a
-`FrameworkServer` in another engine's isolate.
+### The shell-spawned path
+
+`ShellFrameworkScope` closes the loop for a bundle the shell started. It cannot
+build its context up front, because the framework port arrives *during* start:
+the shell posts it after `init`, and the framework isolate may not be up yet.
+`BundleScope.open` runs after `ShellTransport.register` has returned, so the
+scope awaits `ManagedBundle.frameworkPort` there and builds the
+`RemoteBundleContext` from it.
+
+The hazard that comes with it: a bundle using this scope blocks until the port
+arrives, with a critical bundle's startup deadline running throughout. A bundle
+with no peers should not use it at all.
+
+This depends on the shell posting a `SendPort`, which landed in ivi-homescreen
+#531 (`shell/osgi/bridge_registry.cc`). A shell built before that posts an
+`int64` instead, and a bundle on this path will wait for a port that never
+arrives.
 
 ## Event admin
 

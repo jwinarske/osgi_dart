@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
@@ -18,7 +19,7 @@ class DetachedShellTransport implements ShellTransport {
 
   @override
   Future<ShellBinding> register(String symbolicName) async {
-    final Completer<int> port = Completer<int>();
+    final Completer<SendPort> port = Completer<SendPort>();
     port.completeError(
       ShellUnavailableException(
         'bundle "$symbolicName" runs in a framework-spawned isolate, which the '
