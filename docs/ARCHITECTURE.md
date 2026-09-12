@@ -14,10 +14,10 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | Lifecycle states and transition table | `osgi_api` | Done — identical to the shell's |
 | `ShellTransport` seam | `osgi_api` | Done |
 | MethodChannel transport | `osgi_flutter` | Done for `role: bundle`; `role: framework` not implemented |
-| Service registry | `osgi_framework` | In-process only; LDAP filters without substring matching |
+| Service registry | `osgi_framework` | Shared across isolates through `FrameworkServer`; LDAP filters without substring matching |
 | Fake shell transport | `osgi_test` | Done |
 | `BundleContext` and lifecycle manager | `osgi_framework` | `ManagedBundle` runs one bundle's activator; in-process registry |
-| Framework isolate and inter-bundle `SendPort` protocol | `osgi_framework` | Not started |
+| Framework isolate and inter-bundle protocol | `osgi_framework` | `FrameworkServer` and `RemoteBundleContext`: services, trackers, routing. No priority ports; bundle spawning not started |
 | Event admin | `osgi_framework` | In-process only; not yet posting bundle lifecycle events |
 | FFI transport (`ihs_osgi_*`) | — | Not started; C headers drafted in ivi-homescreen, not wired in |
 | Lifecycle widgets | `osgi_flutter` | Not started |
@@ -260,6 +260,53 @@ isolate exists it is usable only in-process.
   as added after its removal.
 - **`unregister()`** is idempotent, because `stop()` also runs after a start
   that failed partway.
+
+## Across isolates
+
+The registry is ordinary Dart objects, so it cannot be shared with another
+isolate: sending it would copy it, and every bundle would end up with a private
+registry. `FrameworkServer` keeps it and serves bundles by message;
+`RemoteBundleContext` is the `BundleContext` a bundle in another isolate uses.
+
+**Services cross as ports, never as objects.** Objects sent between isolates
+are copied — measured, not assumed: a list mutated by the receiver leaves the
+sender's untouched. A service object sent that way would give the consumer a
+copy that no call could reach. So what the registry holds for a remote bundle
+is a `ServiceEndpoint`: a port its owner listens on, plus the properties needed
+to find it. `RemoteBundleContext.registerService` therefore requires a
+`SendPort` and rejects anything else, rather than silently publishing a copy.
+The message protocol a service speaks on its port belongs to the service.
+
+**`const` property maps travel by reference.** A `const` map arrives identical
+after a round trip; a non-const one is copied. Declaring service properties
+`const` is worth it.
+
+Other properties worth knowing:
+
+- **Trackers behave as they do in-process.** The server replays current matches
+  when a tracker opens, and the client keeps the tracked set, so a listener
+  arriving after `open()` still starts from the current state.
+- **Only the publisher can withdraw a service.** The framework checks ownership
+  rather than trusting the name in the request.
+- **Detaching releases everything** a bundle holds: its services, its trackers,
+  and its place in the routing table.
+- **A killed isolate cannot detach itself**, so its endpoint stays registered
+  until something else releases it — a lifecycle owner, or the shell noticing
+  the engine died. There is a test asserting exactly this, because it is a
+  property to design around rather than a bug to be surprised by.
+- **Failures come back as messages.** The framework cannot throw into another
+  isolate, so a malformed filter or an unknown target arrives as a failed reply
+  and is raised as `FrameworkException` on the calling side.
+
+**No priority ports.** The plan describes a priority port drained ahead of a
+normal one. Two ports and a drain-priority-first loop would only order messages
+already delivered to this isolate in the same event-loop turn: the VM decides
+delivery order across ports, and nothing in Dart can inspect a port's queue to
+do better. It is left out rather than claimed, until something measures whether
+the weaker guarantee is worth having.
+
+Still missing here: spawning bundle isolates, event admin across isolates, and
+wiring `ManagedBundle` to drive a `RemoteBundleContext`.
 
 ## Event admin
 
