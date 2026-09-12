@@ -120,10 +120,13 @@ service registry with LDAP filters, an event admin, the bundle lifecycle --
 reports ACTIVE when it has really finished -- the framework isolate, which lets
 bundles in separate isolates publish and find each other's services, and a
 loader that spawns a pure-Dart bundle into its own isolate and runs it there.
-The FFI transport (`osgi_ffi`) is written and unit-tested against a fake of the
-C surface, but nothing has run it end to end: the `ihs_osgi_*` symbols it binds
-are still in review upstream (ivi-homescreen #538), and the shell-side host that
-installs them follows after that.
+The FFI transport (`osgi_ffi`) is written and unit-tested, and both halves it
+depends on are now merged upstream: the `ihs_osgi_*` surface in `libihs_shared`
+(ivi-homescreen #538) and the shell host that installs the proc table behind it
+(#540). What has *not* happened is a handshake with a live Dart VM. Every test
+on either side fakes the other -- the shell suites fake the Dart DL calls, and
+`osgi_ffi` is tested against a fake of the C surface -- so the FFI path is
+complete but unproven on hardware.
 
 No lifecycle widgets are supplied, and that is a decision rather than a gap.
 `ManagedBundle.state` is a `BundleState` and `ManagedBundle.states` a
@@ -133,10 +136,10 @@ the stream in a `StreamBuilder` and renders whatever suits it -- `isLive` and
 to guess at the shape (an overlay? a banner? a gate holding the tree back until
 ACTIVE?), and every bundle that disagreed would carry the guess anyway.
 
-The shell side is merged in ivi-homescreen `v3.0` (#419–#431), and its
-critical-first startup ordering has been proven on hardware with a minimal
-activator. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for what exists in
-each package.
+The shell side is merged in ivi-homescreen `v3.0` (#419–#431, plus #537, #538
+and #540 for the declared-name check and the FFI path), and its critical-first
+startup ordering has been proven on hardware with a minimal activator. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for what exists in each package.
 
 ## Documentation
 
