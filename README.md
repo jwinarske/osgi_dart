@@ -14,12 +14,14 @@ registry, and the transport between the two. That is what lives here.
 | `osgi_api` | no | Interfaces only: bundle lifecycle, activator, service registry, and the shell transport seam. |
 | `osgi_framework` | no | The framework itself. Runs in the framework isolate. |
 | `osgi_flutter` | yes | The MethodChannel shell transport. No widgets: a bundle that wants to show its own lifecycle renders `ManagedBundle.states` directly. |
+| `osgi_ffi` | no | The FFI shell transport, through `libihs_shared`. What a headless bundle uses: no UI binding, and the ACTIVE report never crosses the platform thread. |
 | `osgi_test` | no | Test doubles, so an activator can be tested without a shell, an engine, or a display. |
 
 The split is not cosmetic. A headless bundle -- a CAN decoder, a telemetry sink
 -- has no views, and dragging in a UI binding so it can send three integers to
 the shell is the kind of dependency that later turns out to be load-bearing.
-Such a bundle depends on `osgi_api` and `osgi_framework` and nothing else.
+Such a bundle depends on `osgi_api` and `osgi_framework`, plus `osgi_ffi` if it
+has to announce itself to the shell at all -- and never on Flutter.
 
 ## MethodChannel or FFI?
 
@@ -118,7 +120,10 @@ service registry with LDAP filters, an event admin, the bundle lifecycle --
 reports ACTIVE when it has really finished -- the framework isolate, which lets
 bundles in separate isolates publish and find each other's services, and a
 loader that spawns a pure-Dart bundle into its own isolate and runs it there.
-Not yet written: the FFI transport.
+The FFI transport (`osgi_ffi`) is written and unit-tested against a fake of the
+C surface, but nothing has run it end to end: the `ihs_osgi_*` symbols it binds
+are still in review upstream (ivi-homescreen #538), and the shell-side host that
+installs them follows after that.
 
 No lifecycle widgets are supplied, and that is a decision rather than a gap.
 `ManagedBundle.state` is a `BundleState` and `ManagedBundle.states` a
