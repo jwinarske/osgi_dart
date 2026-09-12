@@ -19,7 +19,7 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | `BundleContext` and lifecycle manager | `osgi_framework` | `ManagedBundle` runs one bundle's activator; in-process registry |
 | Framework isolate and inter-bundle protocol | `osgi_framework` | `FrameworkServer` and `RemoteBundleContext`: services, trackers, routing. No priority ports |
 | Spawning pure-Dart bundles | `osgi_framework` | `BundleLoader`: spawn, run the activator, release a bundle whose isolate died |
-| Event admin | `osgi_framework` | In-process only; not yet posting bundle lifecycle events |
+| Event admin | `osgi_framework` | Shared across isolates through `FrameworkServer`; not yet posting bundle lifecycle events |
 | FFI transport (`ihs_osgi_*`) | — | Not started; C headers drafted in ivi-homescreen, not wired in |
 | Lifecycle widgets | `osgi_flutter` | Not started |
 | Location service bundle | — | Planned |
@@ -350,13 +350,38 @@ Two gaps worth knowing:
   that such a bundle should be restarted or torn down is policy, and belongs to
   whatever owns the bundle rather than to the loader.
 
-Still missing: event admin across isolates, and a bundle whose activator the
-shell spawned reaching a `FrameworkServer` in another engine's isolate.
+### Events cross the other way
+
+Services and events pull in opposite directions, and the protocol treats them
+accordingly. A service must **not** be copied — a copy is not the service, so
+what crosses is a port. An event **is** a value, so copying it across the
+boundary is exactly what delivery means. That an `Event` survives the trip
+intact, properties and all, is measured rather than assumed.
+
+`FrameworkServer` therefore owns an `EventAdmin` beside the registry and serves
+remote subscriptions by subscribing to it, so a bundle in the framework's
+isolate and one in its own see the same events, matched the same way.
+
+- **Posting is asynchronous and unacknowledged.** Nothing comes back, because
+  an acknowledgement per event would put a round trip on a path meant to carry
+  many. After a bundle detaches, its posts do nothing rather than failing.
+- **A subscription costs nothing until someone listens.** It is registered with
+  the framework on the first listen and released on cancel, and detaching
+  releases whatever is left.
+- **A malformed pattern throws at the call**, not in the framework's isolate
+  where the caller could never catch it.
+- Subscribing is itself a message, so an event posted immediately after
+  subscribing can overtake the subscription. Code that must not miss the first
+  event has to let the subscription land first.
+
+Still missing: a bundle whose activator the shell spawned reaching a
+`FrameworkServer` in another engine's isolate.
 
 ## Event admin
 
-`EventAdmin` in `osgi_framework`: topic-based publish/subscribe. In-process
-until the framework isolate carries events between bundles.
+`EventAdmin` in `osgi_framework`: topic-based publish/subscribe. Bundles in
+other isolates reach it through `FrameworkServer` — see *Events cross the other
+way* above.
 
 - **Topics** are slash-separated, e.g. `com/ivi/can/THRESHOLD_EXCEEDED`. A
   subscription is one exact topic, a prefix ending in `/*` (everything below

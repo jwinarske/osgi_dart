@@ -3,6 +3,8 @@ import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
+import '../event.dart';
+import '../event_admin.dart';
 import '../service_registry.dart';
 import 'protocol.dart';
 
@@ -27,11 +29,19 @@ import 'protocol.dart';
 /// to do better. The weaker guarantee is worth having only once something
 /// measures it, so it is deliberately absent rather than claimed.
 class FrameworkServer {
-  FrameworkServer({ServiceRegistry? registry})
-    : registry = registry ?? ServiceRegistry();
+  FrameworkServer({ServiceRegistry? registry, EventAdmin? events})
+    : registry = registry ?? ServiceRegistry(),
+      events = events ?? EventAdmin();
 
   /// The registry every bundle shares. Owned here and never sent anywhere.
   final ServiceRegistry registry;
+
+  /// The event admin every bundle shares.
+  ///
+  /// Remote subscriptions are served by subscribing to this, so a bundle in
+  /// this isolate and one in another see the same events, matched the same
+  /// way. Disposed by [stop].
+  final EventAdmin events;
 
   final ReceivePort _requests = ReceivePort('osgi.framework');
 
@@ -46,6 +56,8 @@ class FrameworkServer {
   final Map<int, _Published> _published = <int, _Published>{};
   final Map<String, Map<int, _Subscription>> _trackers =
       <String, Map<int, _Subscription>>{};
+  final Map<String, Map<int, StreamSubscription<Event>>> _topics =
+      <String, Map<int, StreamSubscription<Event>>>{};
 
   int _nextServiceId = 1;
   StreamSubscription<dynamic>? _listening;
@@ -65,6 +77,10 @@ class FrameworkServer {
     for (final int serviceId in _published.keys.toList()) {
       await _published.remove(serviceId)?.registration.unregister();
     }
+    for (final String bundle in _topics.keys.toList()) {
+      await _dropTopics(bundle);
+    }
+    await events.dispose();
     _inboxes.clear();
     _requests.close();
   }
@@ -160,6 +176,40 @@ class FrameworkServer {
         await subscription?.cancel();
         request.replyTo.send(Acknowledged(request.id));
 
+      case PostEvent():
+        // No reply: posting is asynchronous, and the poster is not waiting.
+        events.postEvent(request.event);
+
+      case SubscribeTopic():
+        try {
+          final StreamSubscription<Event> subscription = events
+              .subscribe(request.topicPattern)
+              .listen((Event event) {
+                request.replyTo.send(
+                  EventDelivered(
+                    subscriptionId: request.subscriptionId,
+                    event: event,
+                  ),
+                );
+              });
+          _topics.putIfAbsent(
+            request.bundle,
+            () => <int, StreamSubscription<Event>>{},
+          )[request.subscriptionId] = subscription;
+          request.replyTo.send(Acknowledged(request.id));
+        } on ArgumentError catch (e) {
+          // The client validates the pattern before sending, so this is a
+          // bundle reaching the protocol directly. Answer rather than throw:
+          // an exception here would be an unhandled error in the framework.
+          request.replyTo.send(RequestFailed(request.id, e.toString()));
+        }
+
+      case UnsubscribeTopic():
+        final StreamSubscription<Event>? subscription = _topics[request.bundle]
+            ?.remove(request.subscriptionId);
+        await subscription?.cancel();
+        request.replyTo.send(Acknowledged(request.id));
+
       case SendToBundle():
         final SendPort? inbox = _inboxes[request.target];
         if (inbox == null) {
@@ -221,6 +271,7 @@ class FrameworkServer {
 
   Future<void> _detach(String bundle) async {
     await _dropTrackers(bundle);
+    await _dropTopics(bundle);
     for (final int serviceId in _published.keys.toList()) {
       final _Published published = _published[serviceId]!;
       if (published.bundle != bundle) continue;
@@ -234,6 +285,16 @@ class FrameworkServer {
     final Map<int, _Subscription>? subscriptions = _trackers.remove(bundle);
     if (subscriptions == null) return;
     for (final _Subscription subscription in subscriptions.values) {
+      await subscription.cancel();
+    }
+  }
+
+  Future<void> _dropTopics(String bundle) async {
+    final Map<int, StreamSubscription<Event>>? subscriptions = _topics.remove(
+      bundle,
+    );
+    if (subscriptions == null) return;
+    for (final StreamSubscription<Event> subscription in subscriptions.values) {
       await subscription.cancel();
     }
   }

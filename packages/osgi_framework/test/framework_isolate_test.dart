@@ -36,6 +36,25 @@ void producerMain(List<Object> args) async {
   ready.send('registered');
 }
 
+/// A bundle in its own isolate that attaches and posts one event.
+///
+/// The parent subscribes before spawning this, so the post cannot arrive
+/// before there is anything listening for it.
+void posterMain(List<Object> args) async {
+  final SendPort framework = args[0] as SendPort;
+
+  final RemoteBundleContext context = RemoteBundleContext(
+    symbolicName: 'com.ivi.poster',
+    framework: framework,
+    requestTimeout: const Duration(seconds: 20),
+  );
+  await context.attach();
+  context.post('com/ivi/can/THRESHOLD', const <String, Object?>{
+    'signal': 'EngineTemp',
+    'value': 105.0,
+  });
+}
+
 void main() {
   late FrameworkServer server;
   late RemoteBundleContext consumer;
@@ -118,6 +137,26 @@ void main() {
     expect((endpoint! as ServiceEndpoint).interfaceName, 'CanBus');
     await tracker.close();
   });
+
+  test(
+    'an event posted in another isolate reaches a subscriber here',
+    () async {
+      // An event is a value, so copying it across the boundary is what delivery
+      // means -- unlike a service, where a copy would be useless.
+      final Future<Event> received = consumer.subscribe('com/ivi/can/*').first;
+      await pumpEventQueue();
+
+      spawned.add(
+        await Isolate.spawn(posterMain, <Object>[
+          server.port,
+        ], debugName: 'com.ivi.poster'),
+      );
+
+      final Event event = await received.timeout(const Duration(seconds: 20));
+      expect(event.topic, 'com/ivi/can/THRESHOLD');
+      expect(event.property<double>('value'), 105.0);
+    },
+  );
 
   test('killing a bundle isolate leaves its service registered', () async {
     // Worth stating plainly: the framework learns that a bundle is gone only

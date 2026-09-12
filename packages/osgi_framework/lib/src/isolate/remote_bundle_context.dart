@@ -9,6 +9,8 @@ import 'dart:isolate';
 
 import 'package:osgi_api/osgi_api.dart';
 
+import '../event.dart';
+import '../topic_filter.dart';
 import 'protocol.dart';
 
 /// Raised when the framework refuses a request.
@@ -64,12 +66,15 @@ class RemoteBundleContext implements BundleContext {
       <int, Completer<FrameworkReply>>{};
   final Map<int, _RemoteTracker> _trackers = <int, _RemoteTracker>{};
   final List<_RemoteRegistration> _registrations = <_RemoteRegistration>[];
+  final Map<int, StreamController<Event>> _topics =
+      <int, StreamController<Event>>{};
 
   final StreamController<Object?> _incoming =
       StreamController<Object?>.broadcast();
 
   int _nextRequestId = 1;
   int _nextTrackerId = 1;
+  int _nextSubscriptionId = 1;
   BundleState _state = BundleState.resolved;
   bool _detached = false;
 
@@ -124,6 +129,10 @@ class RemoteBundleContext implements BundleContext {
     }
     _trackers.clear();
     _registrations.clear();
+    for (final StreamController<Event> topic in _topics.values.toList()) {
+      await topic.close();
+    }
+    _topics.clear();
     for (final Completer<FrameworkReply> pending in _pending.values) {
       if (!pending.isCompleted) {
         pending.completeError(
@@ -224,6 +233,70 @@ class RemoteBundleContext implements BundleContext {
     return tracker;
   }
 
+  /// Post an event on [topic] to every bundle subscribed to it.
+  ///
+  /// Asynchronous and unacknowledged, like `EventAdmin.post`: this returns
+  /// before any subscriber runs, and nothing comes back. After [detach] it
+  /// does nothing, because a bundle that is stopping should not have its
+  /// teardown fail over a posted event.
+  void post(
+    String topic, [
+    Map<String, Object?> properties = const <String, Object?>{},
+  ]) => postEvent(Event(topic, properties));
+
+  /// Post a prepared event. See [post].
+  void postEvent(Event event) {
+    if (_detached) return;
+    _send(
+      (int id) => PostEvent(
+        id: id,
+        bundle: symbolicName,
+        replyTo: _inbox.sendPort,
+        event: event,
+      ),
+    );
+  }
+
+  /// Events whose topic matches [topicPattern].
+  ///
+  /// The subscription is registered with the framework when someone listens
+  /// and released when they cancel, so a stream nobody listens to costs
+  /// nothing. Events posted before a listener starts are not delivered to it.
+  ///
+  /// Throws [ArgumentError] straight away for a malformed pattern, rather than
+  /// leaving a subscription that could never match.
+  Stream<Event> subscribe(String topicPattern) {
+    TopicFilter(topicPattern); // validate here, where the caller can see it
+    final int subscriptionId = _nextSubscriptionId++;
+    late final StreamController<Event> controller;
+    controller = StreamController<Event>(
+      onListen: () {
+        _topics[subscriptionId] = controller;
+        _send(
+          (int id) => SubscribeTopic(
+            id: id,
+            bundle: symbolicName,
+            replyTo: _inbox.sendPort,
+            subscriptionId: subscriptionId,
+            topicPattern: topicPattern,
+          ),
+        );
+      },
+      onCancel: () {
+        _topics.remove(subscriptionId);
+        _send(
+          (int id) => UnsubscribeTopic(
+            id: id,
+            bundle: symbolicName,
+            replyTo: _inbox.sendPort,
+            subscriptionId: subscriptionId,
+          ),
+        );
+      },
+    );
+    return controller.stream;
+  }
+
   /// Route [message] to another attached bundle.
   ///
   /// Throws [FrameworkException] when no bundle of that name is attached.
@@ -244,10 +317,18 @@ class RemoteBundleContext implements BundleContext {
         _pending.remove(message.id)?.complete(message);
       case TrackerEvent():
         _trackers[message.trackerId]?.handle(message);
+      case EventDelivered():
+        final StreamController<Event>? topic = _topics[message.subscriptionId];
+        if (topic != null && !topic.isClosed) topic.add(message.event);
       default:
         // Anything else came from another bundle by way of the framework.
         if (!_incoming.isClosed) _incoming.add(message);
     }
+  }
+
+  /// Send without waiting for an answer, for the notifications that have none.
+  void _send(FrameworkRequest Function(int id) build) {
+    _framework.send(build(_nextRequestId++));
   }
 
   Future<R> _request<R extends FrameworkReply>(
