@@ -191,13 +191,13 @@ class BundleLoader {
 
   /// Tell the framework to let go of a bundle that cannot say so itself.
   ///
-  /// This works because the framework trusts the name on attach and detach --
-  /// it checks ownership only when a service is withdrawn. That is convenient
-  /// here and a gap elsewhere; see `docs/ARCHITECTURE.md`.
+  /// [ReleaseBundle] rather than [DetachBundle]: a detach must arrive on the
+  /// port that attached, and this bundle's isolate is gone. The supervisor
+  /// asymmetry lives in that message rather than in an exemption here.
   Future<void> _release(String symbolicName) async {
     if (_closed) return;
     framework.send(
-      DetachBundle(
+      ReleaseBundle(
         id: _nextRequestId++,
         bundle: symbolicName,
         replyTo: _replies.sendPort,

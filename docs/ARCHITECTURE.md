@@ -295,8 +295,17 @@ Other properties worth knowing:
 - **Trackers behave as they do in-process.** The server replays current matches
   when a tracker opens, and the client keeps the tracked set, so a listener
   arriving after `open()` still starts from the current state.
-- **Only the publisher can withdraw a service.** The framework checks ownership
-  rather than trusting the name in the request.
+- **Identity is the port a request arrived on**, not the name written into it.
+  `AttachBundle` binds a name to the port that sent it, and every later request
+  naming that bundle must arrive on the same port — so a bundle cannot detach
+  another, withdraw its services, look up as it, or route as it. Attaching a
+  name already bound to a different port is refused rather than rebinding it.
+- **The one exception is a supervisor releasing a dead bundle.** An isolate that
+  died cannot send anything, so `ReleaseBundle` exists for the case where the
+  caller legitimately is not the bundle. It is a separate message rather than an
+  exemption inside `DetachBundle`, so the asymmetry is visible in the protocol;
+  anything holding the framework port may send it today, which is the same trust
+  the shell extends to a bundle reporting ACTIVE.
 - **Detaching releases everything** a bundle holds: its services, its trackers,
   and its place in the routing table.
 - **A killed isolate cannot detach itself**, so its endpoint stays registered

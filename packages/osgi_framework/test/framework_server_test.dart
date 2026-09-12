@@ -239,6 +239,108 @@ void main() {
     });
   });
 
+  group('identity', () {
+    test('a bundle cannot act as another by naming it', () async {
+      // Identity is the port a request arrived on. Without that, any bundle
+      // could detach another, withdraw its services, or send as it.
+      final RemoteBundleContext victim = await bundle('com.ivi.can');
+      final ReceivePort service = ReceivePort();
+      addTearDown(service.close);
+      await victim.registerService('CanBus', service.sendPort);
+
+      final RemoteBundleContext attacker = await bundle('com.ivi.rogue');
+      final ReceivePort replies = ReceivePort();
+      addTearDown(replies.close);
+      final Stream<dynamic> answers = replies.asBroadcastStream();
+
+      // Reaching the protocol directly, which is all a hostile bundle needs.
+      server.port.send(
+        DetachBundle(id: 900, bundle: 'com.ivi.can', replyTo: replies.sendPort),
+      );
+      expect(await answers.first, isA<RequestFailed>());
+
+      server.port.send(
+        LookupEndpoints(
+          id: 901,
+          bundle: 'com.ivi.can',
+          replyTo: replies.sendPort,
+          interfaceName: 'CanBus',
+          all: false,
+        ),
+      );
+      expect(await answers.first, isA<RequestFailed>());
+
+      expect(
+        await attacker.lookup('CanBus'),
+        isNotNull,
+        reason: 'the victim is untouched and still serving',
+      );
+    });
+
+    test('attaching a name already bound to another port is refused', () async {
+      await bundle('com.ivi.can');
+      final ReceivePort other = ReceivePort();
+      addTearDown(other.close);
+
+      server.port.send(
+        AttachBundle(id: 910, bundle: 'com.ivi.can', replyTo: other.sendPort),
+      );
+
+      expect(await other.first, isA<RequestFailed>());
+    });
+
+    test('attaching again on the same port is fine', () async {
+      // Idempotent: a bundle that re-attaches after a transient failure must
+      // not be locked out of its own name.
+      final RemoteBundleContext bundleA = await bundle('com.ivi.can');
+      await expectLater(bundleA.attach(), completes);
+    });
+
+    test('a request from a port that never attached is refused', () async {
+      final ReceivePort stranger = ReceivePort();
+      addTearDown(stranger.close);
+
+      server.port.send(
+        LookupEndpoints(
+          id: 920,
+          bundle: 'com.ivi.ghost',
+          replyTo: stranger.sendPort,
+          interfaceName: 'CanBus',
+          all: false,
+        ),
+      );
+
+      expect(await stranger.first, isA<RequestFailed>());
+    });
+
+    test(
+      'a supervisor may release a bundle that cannot release itself',
+      () async {
+        // The one asymmetry, and why it is its own message: the named bundle is
+        // gone, so it cannot be the sender.
+        final RemoteBundleContext victim = await bundle('com.ivi.can');
+        final ReceivePort service = ReceivePort();
+        addTearDown(service.close);
+        await victim.registerService('CanBus', service.sendPort);
+
+        final RemoteBundleContext observer = await bundle('com.ivi.observer');
+        final ReceivePort supervisor = ReceivePort();
+        addTearDown(supervisor.close);
+
+        server.port.send(
+          ReleaseBundle(
+            id: 930,
+            bundle: 'com.ivi.can',
+            replyTo: supervisor.sendPort,
+          ),
+        );
+
+        expect(await supervisor.first, isA<Acknowledged>());
+        expect(await observer.lookup('CanBus'), isNull);
+      },
+    );
+  });
+
   group('events', () {
     test('an event reaches a subscriber in another bundle', () async {
       final RemoteBundleContext poster = await bundle('com.ivi.can');
