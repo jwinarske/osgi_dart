@@ -98,9 +98,11 @@ class ShellBinding {
 /// `dart_api_unavailable` means the shell's Dart DL headers do not match the
 /// running VM.
 ///
-/// A name that matches no `[[osgi.bundles]]` entry is *not* rejected: the shell
-/// accepts it and ignores its reports, so the configured bundle's startup
-/// deadline expires instead. See `docs/ARCHITECTURE.md`.
+/// A name that matches no `[[osgi.bundles]]` entry *is* rejected, as of
+/// ivi-homescreen #537: the shell is given the declared names at bring-up and
+/// refuses `init` for anything else, so a typo fails at the call that made it.
+/// Before that it was accepted and its reports quietly ignored, which surfaced
+/// as the *correctly* named bundle's startup deadline expiring instead.
 class ShellRejectedException implements Exception {
   ShellRejectedException(this.code, this.message);
 
