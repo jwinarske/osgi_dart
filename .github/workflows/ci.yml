@@ -64,6 +64,10 @@ jobs:
         working-directory: packages/osgi_framework
         run: dart test
 
+      - name: Test osgi_ffi
+        working-directory: packages/osgi_ffi
+        run: dart test
+
       - name: Test osgi_test
         working-directory: packages/osgi_test
         run: dart test

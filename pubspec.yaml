@@ -12,6 +12,7 @@ environment:
 # pure-Dart packages still analyze and test with plain `dart`.
 workspace:
   - packages/osgi_api
+  - packages/osgi_ffi
   - packages/osgi_flutter
   - packages/osgi_framework
   - packages/osgi_test
