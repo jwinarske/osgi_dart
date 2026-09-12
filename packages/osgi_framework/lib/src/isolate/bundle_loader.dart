@@ -27,7 +27,8 @@ typedef ActivatorFactory = BundleActivator Function();
 ///
 /// The loader also watches each isolate's exit. A bundle that dies cannot
 /// release itself, so without this its services would stay in the registry
-/// pointing at a port nothing listens on.
+/// pointing at a port nothing listens on. What a bundle throws and never
+/// catches arrives on [errors].
 class BundleLoader {
   BundleLoader({required this.framework});
 
@@ -39,8 +40,21 @@ class BundleLoader {
   int _nextRequestId = 1;
   bool _closed = false;
 
+  final StreamController<BundleError> _errors =
+      StreamController<BundleError>.broadcast();
+
   /// Bundles running right now.
   Iterable<String> get running => _loaded.keys;
+
+  /// Uncaught errors from running bundles.
+  ///
+  /// Two things to know before relying on it. It is a broadcast stream, so an
+  /// error raised while nothing is listening is dropped rather than buffered --
+  /// attach before spawning if you care. And an uncaught error does not stop
+  /// the bundle: the isolates are spawned with `errorsAreFatal: false`, because
+  /// a bundle that throws in some background timer is still serving whatever
+  /// else it published. This reports; it does not decide.
+  Stream<BundleError> get errors => _errors.stream;
 
   /// Spawn [symbolicName] and run its activator to completion.
   ///
@@ -76,10 +90,26 @@ class BundleLoader {
       }
     });
 
+    // An uncaught error arrives as two strings: the error and its stack, the
+    // latter null when there is none. Reporting it is the difference between a
+    // bundle that misbehaves visibly and one that misbehaves in silence.
+    onError.listen((dynamic message) {
+      if (_errors.isClosed) return;
+      final List<Object?> parts = message is List<Object?>
+          ? message
+          : <Object?>[message, null];
+      _errors.add(
+        BundleError(
+          symbolicName: symbolicName,
+          error: '${parts.isEmpty ? message : parts.first}',
+          stackTrace: parts.length > 1 ? parts[1]?.toString() : null,
+        ),
+      );
+    });
+
     // An isolate that dies takes its bundle with it, and a dead isolate cannot
     // detach. Releasing it here is the difference between a stale endpoint and
     // a registry that tells the truth.
-    onError.listen((dynamic _) {});
     onExit.listen((dynamic _) {
       unawaited(_release(symbolicName));
     });
@@ -147,6 +177,7 @@ class BundleLoader {
       await stop(name, timeout: const Duration(seconds: 5));
     }
     _replies.close();
+    await _errors.close();
   }
 
   Future<void> _tearDown(String symbolicName, {required bool kill}) async {
@@ -174,6 +205,26 @@ class BundleLoader {
     );
     await _tearDown(symbolicName, kill: false);
   }
+}
+
+/// Something a bundle threw and nothing in it caught.
+///
+/// Text rather than the error itself: an isolate reports an uncaught error as
+/// two strings, and an arbitrary error object would not reliably survive the
+/// crossing in any case.
+class BundleError {
+  const BundleError({
+    required this.symbolicName,
+    required this.error,
+    this.stackTrace,
+  });
+
+  final String symbolicName;
+  final String error;
+  final String? stackTrace;
+
+  @override
+  String toString() => 'BundleError("$symbolicName"): $error';
 }
 
 /// Raised when a spawned bundle's activator failed to start.
