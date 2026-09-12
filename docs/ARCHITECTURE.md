@@ -20,7 +20,7 @@ defined and enforced by the shell; this page describes it from a bundle's side.
 | Framework isolate and inter-bundle protocol | `osgi_framework` | `FrameworkServer` and `RemoteBundleContext`: services, trackers, routing. No priority ports |
 | Spawning pure-Dart bundles | `osgi_framework` | `BundleLoader`: spawn, run the activator, release a bundle whose isolate died |
 | Event admin | `osgi_framework` | Shared across isolates through `FrameworkServer`; not yet posting bundle lifecycle events |
-| FFI transport (`ihs_osgi_*`) | `osgi_ffi` | Both halves merged upstream: the C surface (ivi-homescreen #538) and the shell host that installs it (#540). Each side is unit-tested against a fake of the other; no live-VM handshake yet |
+| FFI transport (`ihs_osgi_*`) | `osgi_ffi` | Both halves merged upstream: the C surface (ivi-homescreen #538) and the shell host that installs it (#540). The boundary is tested per-PR against a real Dart VM and a real `libihs_shared`, including `kSendPort` materialising a usable `SendPort`; the multi-bundle deployment on KMS is not yet asserted in CI, and nothing has run on a board |
 | Lifecycle widgets | — | Not planned — a bundle renders `ManagedBundle.states` in a `StreamBuilder` itself |
 | Location service bundle | — | Planned |
 | Shell side (`shell/osgi/`) | ivi-homescreen | Merged (#419–#431, #537, #538, #540); critical-first ordering proven on rpi4 |

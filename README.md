@@ -123,10 +123,16 @@ loader that spawns a pure-Dart bundle into its own isolate and runs it there.
 The FFI transport (`osgi_ffi`) is written and unit-tested, and both halves it
 depends on are now merged upstream: the `ihs_osgi_*` surface in `libihs_shared`
 (ivi-homescreen #538) and the shell host that installs the proc table behind it
-(#540). What has *not* happened is a handshake with a live Dart VM. Every test
-on either side fakes the other -- the shell suites fake the Dart DL calls, and
-`osgi_ffi` is tested against a fake of the C surface -- so the FFI path is
-complete but unproven on hardware.
+(#540). The boundary itself is now tested against a real Dart VM and a real
+`libihs_shared` on every CI run: registration crosses, the shell's
+`Dart_CObject_kSendPort` materialises as a `SendPort` the bundle can actually
+send through, a minted handle is honoured and a forged one refused.
+
+What is still unproven is the deployment, not the boundary -- two bundles, two
+engines, two connectors, critical-first ordering. That is what
+`test/osgi_multi_bundle.sh` asserts, and it runs on virtual KMS rather than a
+board, so "not yet run on hardware" remains true of the whole path even once it
+is green.
 
 No lifecycle widgets are supplied, and that is a decision rather than a gap.
 `ManagedBundle.state` is a `BundleState` and `ManagedBundle.states` a
